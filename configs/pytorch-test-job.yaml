@@ -1,0 +1,70 @@
+apiVersion: "kubeflow.org/v1"
+kind: "PyTorchJob"
+metadata:
+  name: "pytorch-test-job"
+spec:
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: Never
+      template:
+        spec:
+          containers:
+          - name: pytorch
+            image: abhijeetarundhumal/pytorch-cpu:0.0.1
+            imagePullPolicy: IfNotPresent
+            command:
+            - python3
+            - /scripts/simple_test.py
+            resources:
+              requests:
+                memory: "300Mi"
+                cpu: "200m"
+              limits:
+                memory: "500Mi" 
+                cpu: "400m"
+            volumeMounts:
+            - name: models-volume
+              mountPath: /models
+            - name: test-script
+              mountPath: /scripts
+          volumes:
+          - name: models-volume
+            hostPath:
+              path: /models
+          - name: test-script
+            configMap:
+              name: pytorch-test-script
+              defaultMode: 0755
+    Worker:
+      replicas: 1
+      restartPolicy: Never
+      template:
+        spec:
+          containers:
+          - name: pytorch
+            image: abhijeetarundhumal/pytorch-cpu:0.0.1
+            imagePullPolicy: IfNotPresent
+            command:
+            - python3
+            - /scripts/simple_test.py
+            resources:
+              requests:
+                memory: "300Mi"
+                cpu: "200m"
+              limits:
+                memory: "500Mi" 
+                cpu: "400m"
+            volumeMounts:
+            - name: models-volume
+              mountPath: /models
+            - name: test-script
+              mountPath: /scripts
+          volumes:
+          - name: models-volume
+            hostPath:
+              path: /models
+          - name: test-script
+            configMap:
+              name: pytorch-test-script
+              defaultMode: 0755 

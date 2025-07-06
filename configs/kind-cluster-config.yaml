@@ -1,0 +1,42 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: pytorch-training-cluster
+nodes:
+- role: control-plane
+  extraMounts:
+  - hostPath: ./input
+    containerPath: /input
+  - hostPath: ./output  
+    containerPath: /output
+  - hostPath: ./scripts
+    containerPath: /scripts
+  kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    maxPods: 20
+    systemReserved:
+      memory: "200Mi"  # Reduced from 500Mi for more workload memory
+      cpu: "100m"      # Reduced from 300m
+- role: worker
+  extraMounts:
+  - hostPath: ./input
+    containerPath: /input
+  - hostPath: ./output  
+    containerPath: /output
+  - hostPath: ./scripts
+    containerPath: /scripts
+  kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    maxPods: 50
+    systemReserved:
+      memory: "200Mi"  # Reduced from 500Mi for more workload memory
+      cpu: "100m"      # Reduced from 300m
+    kubeReserved:
+      memory: "100Mi"  # Reduced from 200Mi
+      cpu: "50m"       # Reduced from 100m
+    # Increase available memory for workloads
+    evictionHard:
+      memory.available: "50Mi"    # More aggressive eviction
+      nodefs.available: "5%"
+      imagefs.available: "5%" 

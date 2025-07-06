@@ -1,0 +1,14 @@
+# PyTorch and related packages
+torch==2.0.1
+torchvision==0.15.2
+torchaudio==2.0.2
+
+# Kubernetes Python client
+kubernetes==27.2.0
+
+# YAML parsing
+PyYAML==6.0.1
+
+# Additional utilities
+numpy==1.24.3
+pillow==10.0.0 

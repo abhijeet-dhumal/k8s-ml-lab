@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: simple-mnist-training
+spec:
+  template:
+    spec:
+      containers:
+      - name: pytorch-trainer
+        image: abhijeetarundhumal/pytorch-cpu:0.0.1
+        command: ["python3", "/scripts/simple_single_pod_training.py"]
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "500m"
+          limits:
+            memory: "700Mi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: training-script
+          mountPath: /scripts
+        - name: data-volume
+          mountPath: /data
+        - name: models-volume
+          mountPath: /app/models
+      volumes:
+      - name: training-script
+        configMap:
+          name: simple-training-script
+      - name: data-volume
+        configMap:
+          name: mnist-data
+      - name: models-volume
+        emptyDir: {}
+      restartPolicy: Never
+  backoffLimit: 2 

@@ -1,0 +1,108 @@
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: pytorch-single-worker-distributed
+spec:
+  runPolicy:
+    cleanPodPolicy: None  # Keep pods after completion for artifact collection
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: Never
+      template:
+        spec:
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                    - pytorch-training-cluster-control-plane
+          containers:
+          - name: pytorch
+            # Using custom CPU-only PyTorch image optimized for size
+            image: abhijeetarundhumal/pytorch-cpu:0.0.1
+            imagePullPolicy: IfNotPresent
+            command:
+            - python3
+            - /scripts/distributed_mnist_training.py
+            resources:
+              requests:
+                memory: 350Mi  # Conservative request for scheduling
+                cpu: 250m
+              limits:
+                memory: 450Mi  # Safe limit: 340MB actual MNIST needs + 110MB buffer
+                cpu: 500m
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: input
+              mountPath: /input
+            - name: output
+              mountPath: /output
+          volumes:
+          - name: scripts
+            hostPath:
+              path: /scripts
+              type: Directory
+          - name: input
+            hostPath:
+              path: /input
+              type: Directory
+          - name: output
+            hostPath:
+              path: /output
+              type: Directory
+    Worker:
+      replicas: 1
+      restartPolicy: Never
+      template:
+        spec:
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                    - pytorch-training-cluster-control-plane
+          containers:
+          - name: pytorch
+            # Using custom CPU-only PyTorch image optimized for size
+            image: abhijeetarundhumal/pytorch-cpu:0.0.1
+            imagePullPolicy: IfNotPresent
+            command:
+            - python3
+            - /scripts/distributed_mnist_training.py
+            resources:
+              requests:
+                memory: 350Mi  # Conservative request for scheduling
+                cpu: 250m
+              limits:
+                memory: 450Mi  # Safe limit: 340MB actual MNIST needs + 110MB buffer
+                cpu: 500m
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: input
+              mountPath: /input
+            - name: output
+              mountPath: /output
+          volumes:
+          - name: scripts
+            hostPath:
+              path: /scripts
+              type: Directory
+          - name: input
+            hostPath:
+              path: /input
+              type: Directory
+          - name: output
+            hostPath:
+              path: /output
+              type: Directory 
