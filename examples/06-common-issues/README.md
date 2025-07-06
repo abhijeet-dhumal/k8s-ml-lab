@@ -48,7 +48,7 @@ sudo mv ./kind /usr/local/bin/kind
 kind --version
 ```
 
-**Prevention:** Use `./setup.sh install-deps` for automated installation.
+**Prevention:** Use `make setup` for automated installation.
 
 ### Issue 2: "Docker daemon not running"
 
@@ -149,7 +149,7 @@ kubectl get deployment training-operator -n kubeflow
 kubectl logs -n kubeflow -l app=training-operator
 
 # Reinstall operator
-./setup.sh install-operator
+make install-operator
 ```
 
 **Prevention:** Always run operator installation step.
@@ -170,7 +170,7 @@ kubectl apply -f https://raw.githubusercontent.com/kubeflow/training-operator/ma
 kubectl get crd | grep pytorch
 ```
 
-**Prevention:** Use `./setup.sh install-operator` for proper installation.
+**Prevention:** Use `make install-operator` for proper installation.
 
 ---
 
@@ -223,7 +223,7 @@ kubectl get configmap pytorch-training-script -o yaml
 kubectl describe pod pod-name
 ```
 
-**Prevention:** Validate setup with `./setup.sh validate`.
+**Prevention:** Validate setup with `make verify-system`.
 
 ---
 
@@ -373,13 +373,11 @@ kubectl get resourcequotas --all-namespaces
 # Complete reset (Kind clusters only)
 make cleanup-all
 make setup
-make setup-training
 
 # Partial reset (existing clusters)
 make cleanup
 kubectl delete namespace kubeflow
-./setup.sh install-operator
-./setup.sh prepare-training
+make install-operator
 ```
 
 ---

@@ -1,48 +1,48 @@
-# Distributed PyTorch Training with Kubeflow
+# K8s ML Training Lab - Local Infrastructure Setup
 
-🚀 **Complete setup for distributed PyTorch training on local Kubernetes clusters using Kubeflow Training Operator**
+🚀 **Complete infrastructure setup for Kubernetes-based ML workloads with automated local cluster provisioning and operator management**
 
-A production-ready, beginner-friendly solution that gets you from zero to distributed ML training in 15 minutes.
+A production-ready, infrastructure-first solution that gets you from zero to a fully configured K8s ML environment in 15 minutes.
 
 ## 🎯 What This Project Provides
 
-✅ **Real Distributed Training**: 2+ process PyTorch training with gradient synchronization  
-✅ **Local Kubernetes**: Kind cluster optimized for laptops/workstations  
-✅ **Kubeflow Integration**: Industry-standard training operator  
-✅ **MNIST Dataset**: 60,000 real images with 90%+ accuracy results  
-✅ **Model Inference**: Test trained models with custom handwritten digit images  
-✅ **Fault Tolerance**: Multiple backend fallbacks (NCCL → Gloo → Manual)  
-✅ **Resource Optimized**: Efficient memory usage for M1/M2 Macs  
+✅ **Automated Cluster Setup**: Kind clusters optimized for ML workloads on laptops/workstations  
+✅ **Operator Management**: Automated Kubeflow Training Operator installation and configuration  
+✅ **Infrastructure as Code**: Declarative cluster configurations and resource management  
+✅ **Multi-Backend Support**: Flexible infrastructure supporting various ML frameworks  
+✅ **Resource Optimization**: Memory and CPU configurations tuned for local development  
+✅ **Fault-Tolerant Setup**: Robust infrastructure with multiple fallback mechanisms  
+✅ **Ready-to-Use Examples**: Pre-configured distributed PyTorch training as proof-of-concept  
 
 ## 📁 Project Structure
 
 ```
-distributed-pytorch-training-setup/
-├── scripts/                            # Core training scripts
-│   ├── distributed_mnist_training.py   # Main distributed training
-│   ├── simple_single_pod_training.py   # Single-pod training
-│   └── test_mnist_model.py             # Model inference and testing
-├── configs/                            # Kubernetes configurations
-│   ├── pytorch-distributed-job.yaml    # PyTorch training job
-│   └── kind-cluster-config.yaml        # Kind cluster configuration
+k8s-ml-lab/
+├── bin/                                # Executable scripts
+│   └── setup.sh                       # Infrastructure automation script
+├── configs/                            # Infrastructure configurations
+│   ├── kind-cluster-config.yaml        # Kind cluster specification
+│   ├── pytorch-distributed-job.yaml    # Sample workload configuration
+│   └── pytorch-test-job.yaml           # Test workload configuration
+├── scripts/                            # Sample ML workloads
+│   ├── distributed_mnist_training.py   # Distributed training example
+│   ├── simple_single_pod_training.py   # Single-pod training example
+│   └── test_mnist_model.py             # Model inference example
 ├── input/                              # Input datasets (auto-populated)
 ├── output/                             # Training outputs (auto-created)
-├── examples/                           # Detailed examples and guides
+├── examples/                           # Infrastructure examples and guides
 │   ├── README.md                       # 📚 Comprehensive documentation
-│   ├── 01-complete-workflow/           # Complete training + inference
-│   │   └── test_images/                # Default test images for inference
-│   ├── 02-existing-cluster/            # Using existing clusters
-│   ├── 03-custom-dataset/              # Custom dataset training
-│   ├── 04-gpu-training/                # GPU acceleration
-│   ├── 05-debugging/                   # Debugging guide
-│   └── 06-common-issues/               # Troubleshooting guide
-├── test_images/                        # Optional: Your custom test images
-├── setup.sh                           # Main setup script
-├── Makefile                           # Automation commands
+│   ├── 01-complete-workflow/           # Complete infrastructure + workload demo
+│   ├── 02-existing-cluster/            # Existing cluster integration
+│   ├── 03-custom-dataset/              # Custom workload configurations
+│   ├── 04-gpu-training/                # GPU-enabled cluster setup
+│   ├── 05-debugging/                   # Infrastructure debugging guide
+│   └── 06-common-issues/               # Infrastructure troubleshooting
+├── Makefile                           # Infrastructure automation commands
 └── README.md                          # This file
 ```
 
-## 🚀 Quick Start (15 minutes)
+## 🚀 Quick Infrastructure Setup (15 minutes)
 
 ### Prerequisites
 - **macOS 11+** or **Linux** (Ubuntu, Fedora, Debian, etc.)
@@ -50,108 +50,199 @@ distributed-pytorch-training-setup/
 - **4+ CPU cores**, **10GB free disk space**
 - **Docker or Podman** (container runtime)
 
-### 1. Setup
+### 1. Infrastructure Setup
 ```bash
 # Clone repository
-git clone https://github.com/<your-username>/distributed-pytorch-training-setup.git
-cd distributed-pytorch-training-setup
+git clone https://github.com/<your-username>/k8s-ml-lab.git
+cd k8s-ml-lab
 
-# Automated setup (recommended)
-./setup.sh                    # Creates cluster + installs dependencies
-./setup.sh setup-training     # Installs operator + prepares dataset
+# Automated infrastructure setup (recommended)
+make setup                    # Complete setup: cluster + operators + training environment
 
-# Alternative: Use existing cluster
-./setup.sh use-existing       # For EKS, GKE, AKS, minikube, etc.
+# Alternative: Configure existing cluster
+make use-existing             # For EKS, GKE, AKS, minikube, etc.
 ```
 
-### 2. Run Training
+### 2. Verify Infrastructure
 ```bash
-# Submit training job
-make submit-job
+# Comprehensive system verification (recommended first step)
+make verify-system       # Checks system requirements + all dependencies
 
-# Check status
+# Check cluster status
 make status
 
-# View logs
+# Submit test workload
+make submit-job
+
+# View workload logs
 make logs
 
-# Get results
-make results
+# OR: Run complete end-to-end workflow
+make run-e2e-workflow    # Runs training + inference + testing automatically
 ```
 
-### 3. Test Model
+### 3. Test ML Workload
 ```bash
-# Test trained model with sample images
+# Test the sample distributed training workload
 python scripts/test_mnist_model.py
 
-# Test with your own image
-python scripts/test_mnist_model.py --image path/to/digit.png
+# OR: Use make command for easier testing
+make inference                                    # Test with built-in images
+TEST_IMAGE=path/to/digit.png make inference       # Test single custom image
+TEST_IMAGES_DIR=my_digits/ make inference         # Test directory of images
 ```
 
-## 📊 Expected Results
+## 📊 Expected Infrastructure Results
 
 ```
+SUCCESS: Kind cluster 'ml-training-cluster' created
+SUCCESS: Kubeflow Training Operator installed
 SUCCESS: gloo backend initialized - Rank 0, World size 2
 Rank 0: Using pre-downloaded MNIST dataset (60000 train, 10000 test)
-Rank 0, Epoch 0, Batch 0: Loss: 2.298154, Accuracy: 6.25%
-Rank 0, Epoch 0, Batch 20: Loss: 0.524573, Accuracy: 84.38%
-...
-Rank 0: Final Training Accuracy: 90.61%
-Rank 0: Test Accuracy: 90.25%
-✅ Model saved successfully!
+✅ Infrastructure ready for ML workloads!
+✅ Sample workload completed successfully!
 ```
 
-**Generated Files:**
-- `output/latest/trained-model.pth` - Trained model
-- `output/latest/training_metadata.txt` - Training metrics
-- `output/latest/*-pod-logs.txt` - Pod logs
+**Generated Infrastructure:**
+- Kubernetes cluster with ML-optimized configuration
+- Kubeflow Training Operator for distributed workloads
+- Persistent storage for datasets and models
+- Network policies and resource quotas
+- Sample workload demonstrating capabilities
+
+## 🔄 End-to-End Workflow
+
+The `make run-e2e-workflow` command runs the complete end-to-end workflow automation:
+
+1. **Training Phase**: Submits distributed PyTorch training job
+2. **Monitoring Phase**: Tracks job progress and collects logs
+3. **Inference Phase**: Tests trained model with sample images
+4. **Results Phase**: Generates performance reports and saves outputs
+
+**What it does:**
+- Creates and submits PyTorch distributed training job
+- Monitors job completion and downloads training logs
+- Extracts trained model from completed pods
+- Runs inference tests on sample handwritten digit images
+- Generates training metrics and accuracy reports
+- Saves all outputs to `output/latest/` directory
+
+**Example output:**
+```
+✅ Training job submitted and completed
+✅ Model extracted: output/latest/trained-model.pth
+✅ Inference tests passed: 8/10 correct predictions
+✅ Training metrics saved: output/latest/training_metadata.txt
+```
+
+## 🔍 System Verification
+
+The `make verify-system` command performs comprehensive verification of your system readiness:
+
+**System Requirements Check:**
+- Memory: minimum 8GB, recommended 16GB
+- CPU: minimum 4 cores
+- Disk space: minimum 10GB free
+- Operating system and architecture detection
+
+**Dependencies Verification:**
+- Container runtime: Docker/Podman installation and status
+- Python: version and availability
+- kubectl: Kubernetes CLI installation and version
+- kind: Kubernetes in Docker installation
+- Python packages: PyTorch, torchvision, requests, PyYAML
+
+**Infrastructure Status:**
+- Kubernetes cluster accessibility
+- Kubeflow Training Operator installation status
+- Overall readiness assessment
+
+**Example output:**
+```
+✅ Memory: 16GB (sufficient)
+✅ CPU cores: 8 (sufficient)
+✅ Disk space: 45GB free (sufficient)
+✅ Docker: installed and running
+✅ Python: 3.11.5
+✅ kubectl: v1.28.0
+✅ kind: v0.20.0
+✅ Python dependencies: PyTorch, torchvision, requests, PyYAML installed
+✅ Kubernetes cluster: accessible
+✅ Kubeflow Training Operator: installed
+✅ System verification completed - all dependencies are ready!
+```
+
+**Use this command:**
+- Before starting any setup to identify missing dependencies
+- After setup to confirm everything is working
+- When troubleshooting issues
+- As part of CI/CD pipeline validation
 
 ## 📚 Documentation
 
-**👉 [Complete Documentation](examples/README.md)** - Detailed guides, architecture, troubleshooting, and advanced usage
+**👉 [Complete Documentation](examples/README.md)** - Detailed infrastructure guides, architecture, troubleshooting, and advanced configurations
 
 ### Quick Links
 - **[Setup Guide](examples/README.md#setup-guide)** - Detailed installation and configuration
-- **[Architecture](examples/README.md#architecture)** - How distributed training works
-- **[Complete Workflow](examples/01-complete-workflow/)** - End-to-end training + inference
-- **[Existing Clusters](examples/02-existing-cluster/)** - Use EKS, GKE, AKS, etc.
-- **[Custom Dataset](examples/03-custom-dataset/)** - Train with your own data
-- **[GPU Training](examples/04-gpu-training/)** - Accelerate with GPUs
-- **[Debugging](examples/05-debugging/)** - Advanced debugging techniques
-- **[Troubleshooting](examples/06-common-issues/)** - Common problems and solutions
+- **[Architecture](examples/README.md#architecture)** - Infrastructure components and design
+- **[Complete Workflow](examples/01-complete-workflow/)** - End-to-end infrastructure + workload demo
+- **[Existing Clusters](examples/02-existing-cluster/)** - Integrate with EKS, GKE, AKS, etc.
+- **[Custom Workloads](examples/03-custom-dataset/)** - Configure your own ML workloads
+- **[GPU Infrastructure](examples/04-gpu-training/)** - GPU-enabled cluster setup
+- **[Debugging](examples/05-debugging/)** - Infrastructure debugging techniques
+- **[Troubleshooting](examples/06-common-issues/)** - Common infrastructure problems and solutions
 
-## 🔧 Common Commands
+## 🔧 Common Infrastructure Commands
 
 ```bash
-# Infrastructure
-make setup               # Full setup (cluster + training)
-make use-existing        # Use existing cluster
+# Infrastructure Management
+make setup               # Complete infrastructure setup (cluster + dependencies + training env)
+make verify-system       # Comprehensive system and dependency verification
+make use-existing        # Use existing cluster (skip cluster creation)
 
-# Training
-make submit-job          # Submit training job
-make status              # Check job status
-make logs                # View logs
-make results             # Get training results
+# Training & Workflows
+make submit-job          # Submit PyTorch distributed training job
+make run-e2e-workflow    # Run complete end-to-end workflow (training + inference + results)
+make inference           # Run model inference on test images (TEST_IMAGE=path or TEST_IMAGES_DIR=path)
+make status              # Show job status, pods, and recent events
+make logs                # View logs from master pod (real-time)
+make restart             # Restart training job (delete + submit)
+
+# Debugging & Monitoring
+make debug               # Show comprehensive debugging information
 
 # Cleanup
-make cleanup             # Clean up resources (keep cluster)
-make delete-cluster      # Delete kind cluster (Kind only)
+make cleanup             # Clean up jobs and resources (keep cluster)
+make cleanup-all         # Delete entire Kind cluster and all resources
+
+# Aliases (for compatibility)
+make check-requirements  # Alias for verify-system
+make install-operator    # Install Kubeflow training operator (standalone)
 ```
 
-## 🎨 Quick Customization
+## 🎨 Quick Infrastructure Customization
 
-**Scale Workers:**
+**Scale Infrastructure:**
 ```yaml
 # configs/pytorch-distributed-job.yaml
 Worker:
-  replicas: 3  # Change from 1 to 3
+  replicas: 3  # Scale workers from 1 to 3
 ```
 
-**Use Your Dataset:**
+**Custom Cluster Configuration:**
+```yaml
+# configs/kind-cluster-config.yaml
+nodes:
+- role: control-plane
+- role: worker
+- role: worker  # Add more workers
+```
+
+**Configure Your Workloads:**
 ```python
 # scripts/distributed_mnist_training.py
 def load_dataset(rank):
-    # Replace MNIST with your dataset
+    # Replace with your dataset
     train_dataset = YourDataset('/input/your-data')
     return train_dataset, test_dataset
 ```
@@ -159,27 +250,9 @@ def load_dataset(rank):
 ## 🧹 Cleanup
 
 ```bash
-# Delete training job only
+# Delete workloads only
 make cleanup
 
-# Delete everything (Kind cluster only)
+# Delete entire infrastructure (Kind cluster)
 make cleanup-all
-```
-
-## 🤝 Contributing
-
-1. Fork this repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-**Made with ❤️ for the ML community**
-
-*Transform your laptop into a distributed training powerhouse!* 🚀 
+``` 

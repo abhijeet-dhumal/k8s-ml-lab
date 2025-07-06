@@ -1,18 +1,13 @@
-# Distributed PyTorch Training Setup Makefile
-# ==========================================
+# Variables
+JOB_NAME := pytorch-single-worker-distributed
+CLUSTER_NAME := pytorch-training-cluster
+BLUE := \033[0;34m
+GREEN := \033[0;32m
+YELLOW := \033[1;33m
+NC := \033[0m
 
-# Configuration
-CLUSTER_NAME = pytorch-training-cluster
-JOB_NAME = pytorch-single-worker-distributed
-NAMESPACE = default
-KUBECONFIG = ~/.kube/config
-
-# Colors for output
-RED = \033[0;31m
-GREEN = \033[0;32m
-YELLOW = \033[1;33m
-BLUE = \033[0;34m
-NC = \033[0m # No Color
+# Common setup script execution
+SETUP_SCRIPT = @chmod +x bin/setup.sh && ./bin/setup.sh
 
 # Default target
 .PHONY: help
@@ -21,71 +16,43 @@ help: ## Show this help message
 	@echo "=================================="
 	@echo ""
 	@echo "Available commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ==============================================================================
 # SETUP & INSTALLATION
 # ==============================================================================
 
 .PHONY: setup
-setup: ## Install dependencies and create cluster
+setup: ## Full infrastructure setup (cluster + dependencies + training env)
 	@echo -e "$(BLUE)Setting up distributed PyTorch training environment...$(NC)"
-	@chmod +x setup.sh
-	@./setup.sh
+	$(SETUP_SCRIPT)
 
-.PHONY: install-deps
-install-deps: ## Install only dependencies (Docker, Python, kubectl, kind, packages)
-	@echo -e "$(BLUE)Installing dependencies...$(NC)"
-	@chmod +x setup.sh
-	@./setup.sh install-deps
+.PHONY: verify-system
+verify-system: ## Comprehensive system and dependency verification
+	@echo -e "$(BLUE)Running comprehensive system verification...$(NC)"
+	$(SETUP_SCRIPT) verify-system
 
-.PHONY: cluster-only
-cluster-only: ## Create cluster only (prompt for existing vs new)
-	@echo -e "$(BLUE)Creating cluster...$(NC)"
-	@chmod +x setup.sh
-	@./setup.sh cluster-only
-
-.PHONY: install-operator
-install-operator: ## Install Kubeflow training operator only
-	@echo -e "$(BLUE)Installing Kubeflow training operator...$(NC)"
-	@chmod +x setup.sh
-	@./setup.sh install-operator
+.PHONY: use-existing
+use-existing: ## Use existing cluster (skip cluster creation)
+	@echo -e "$(BLUE)Configuring existing cluster...$(NC)"
+	$(SETUP_SCRIPT) use-existing
 
 # ==============================================================================
-# CLUSTER MANAGEMENT
-# ==============================================================================
-
-.PHONY: cluster-info
-cluster-info: ## Show cluster information
-	@echo -e "$(BLUE)Cluster Information:$(NC)"
-	@echo "==================="
-	@kubectl cluster-info
-	@echo ""
-	@echo "Nodes:"
-	@kubectl get nodes -o wide
-	@echo ""
-	@echo "Training Operator:"
-	@kubectl get deployment training-operator -n kubeflow || echo "Training operator not found"
-
-# ==============================================================================
-# JOB MANAGEMENT
+# TRAINING & WORKFLOWS
 # ==============================================================================
 
 .PHONY: submit-job
 submit-job: ## Submit PyTorch distributed training job
 	@echo -e "$(BLUE)Submitting PyTorch training job...$(NC)"
-	@kubectl apply -f configs/pytorch-distributed-job.yaml
-	@echo -e "$(GREEN)✓ Job submitted: $(JOB_NAME)$(NC)"
-	@echo "Use 'make status' to check job status"
+	$(SETUP_SCRIPT) submit-job
 
-.PHONY: delete-job
-delete-job: ## Delete PyTorch training job
-	@echo -e "$(YELLOW)Deleting PyTorch training job...$(NC)"
-	@kubectl delete pytorchjob $(JOB_NAME) || echo "Job not found"
-	@echo -e "$(GREEN)✓ Job deleted$(NC)"
+.PHONY: run-e2e-workflow
+run-e2e-workflow: ## Run complete end-to-end workflow (training + inference + results)
+	@echo -e "$(BLUE)Running complete end-to-end workflow...$(NC)"
+	$(SETUP_SCRIPT) run-workflow
 
 .PHONY: status
-status: ## Show job and pod status
+status: ## Show job status, pods, and recent events
 	@echo -e "$(BLUE)Job Status:$(NC)"
 	@echo "==========="
 	@kubectl get pytorchjob $(JOB_NAME) -o wide || echo "Job not found"
@@ -97,37 +64,22 @@ status: ## Show job and pod status
 	@kubectl get events --field-selector involvedObject.name=$(JOB_NAME) --sort-by='.lastTimestamp' | tail -5 || echo "No events found"
 
 .PHONY: logs
-logs: ## Show logs from master pod
+logs: ## View logs from master pod (real-time)
 	@echo -e "$(BLUE)Master Pod Logs:$(NC)"
 	@kubectl logs -l training.kubeflow.org/job-name=$(JOB_NAME),training.kubeflow.org/replica-type=master -f --tail=100
 
-# ==============================================================================
-# WORKFLOWS
-# ==============================================================================
-
-.PHONY: run-e2e-workflow
-run-e2e-workflow: ## Run complete end-to-end workflow (training + inference)
-	@echo -e "$(BLUE)Running complete end-to-end workflow...$(NC)"
-	@chmod +x examples/01-complete-workflow/run-complete-workflow.sh
-	@cd examples/01-complete-workflow && ./run-complete-workflow.sh all
-	@echo -e "$(GREEN)✓ End-to-end workflow completed!$(NC)"
-
-# ==============================================================================
-# DEBUGGING
-# ==============================================================================
-
 .PHONY: debug
-debug: ## Show debugging information
-	@echo -e "$(BLUE)Debugging Information:$(NC)"
-	@echo "====================="
+debug: ## Show comprehensive debugging information
+	@echo -e "$(BLUE)Comprehensive Debugging Information:$(NC)"
+	@echo "===================================="
 	@echo "Cluster Context:"
-	@kubectl config current-context
+	@kubectl config current-context || echo "No context found"
 	@echo ""
 	@echo "Cluster Info:"
-	@kubectl cluster-info
+	@kubectl cluster-info || echo "Cluster not accessible"
 	@echo ""
 	@echo "Nodes:"
-	@kubectl get nodes
+	@kubectl get nodes -o wide || echo "No nodes found"
 	@echo ""
 	@echo "PyTorchJob CRD:"
 	@kubectl get crd pytorchjobs.kubeflow.org || echo "PyTorchJob CRD not found"
@@ -141,37 +93,50 @@ debug: ## Show debugging information
 	@echo "Job Pods:"
 	@kubectl get pods -l training.kubeflow.org/job-name=$(JOB_NAME) -o wide || echo "No pods found"
 
+.PHONY: restart
+restart: ## Restart training job (delete + submit)
+	@echo -e "$(YELLOW)Restarting training job...$(NC)"
+	@kubectl delete pytorchjob $(JOB_NAME) || echo "Job not found"
+	@sleep 5
+	$(SETUP_SCRIPT) submit-job
+
+.PHONY: inference
+inference: ## Run model inference on test images (TEST_IMAGE=path or TEST_IMAGES_DIR=path)
+	@echo -e "$(BLUE)Running model inference...$(NC)"
+	$(SETUP_SCRIPT) run-inference
+
 # ==============================================================================
 # CLEANUP
 # ==============================================================================
 
 .PHONY: cleanup
-cleanup: ## Clean up all resources (jobs, configmaps)
+cleanup: ## Clean up jobs and resources (keep cluster)
 	@echo -e "$(YELLOW)Cleaning up resources...$(NC)"
 	@kubectl delete pytorchjob $(JOB_NAME) || echo "Job not found"
 	@kubectl delete configmap pytorch-training-script || echo "ConfigMap not found"
 	@echo -e "$(GREEN)✓ Resources cleaned up$(NC)"
 
-.PHONY: cleanup-cluster
-cleanup-cluster: cleanup ## Clean up everything including Kind cluster
+.PHONY: cleanup-all
+cleanup-all: cleanup ## Delete entire Kind cluster and all resources
 	@echo -e "$(YELLOW)Deleting Kind cluster...$(NC)"
 	@kind delete cluster --name $(CLUSTER_NAME) || echo "Cluster not found"
 	@echo -e "$(GREEN)✓ Complete cleanup done$(NC)"
 
 # ==============================================================================
-# CONVENIENCE TARGETS
+# ALIASES FOR COMPATIBILITY
 # ==============================================================================
 
-.PHONY: restart
-restart: delete-job submit-job ## Restart PyTorch training job
+.PHONY: check-requirements
+check-requirements: verify-system ## Alias for verify-system
 
-.PHONY: quick-start
-quick-start: setup submit-job status ## Quick start: setup and submit job
-	@echo -e "$(GREEN)✓ Quick start completed! Use 'make logs' to view progress$(NC)"
+.PHONY: install-operator
+install-operator: ## Install Kubeflow training operator (standalone)
+	@echo -e "$(BLUE)Installing Kubeflow training operator...$(NC)"
+	$(SETUP_SCRIPT) install-operator
 
-# Make setup.sh executable
-setup.sh:
-	@chmod +x setup.sh
+# Make bin/setup.sh executable
+bin/setup.sh:
+	@chmod +x bin/setup.sh
 
 # Default target when no argument is given
 .DEFAULT_GOAL := help 

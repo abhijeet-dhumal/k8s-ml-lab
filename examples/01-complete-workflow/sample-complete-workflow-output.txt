@@ -2,7 +2,7 @@ Complete Workflow Sample Output
 =================================
 
 This is a sample output from running:
-./run-complete-workflow.sh all
+make run-e2e-workflow
 
 🚀 Complete ML Workflow: Training + Inference
 ==================================================
@@ -55,7 +55,7 @@ node/pytorch-training-cluster-worker condition met
 ✓ Cluster setup completed successfully!
 
 Next steps:
-1. Run './setup.sh install-operator' to install Kubeflow training operator
+1. Run 'make install-training-operator' to install Kubeflow training operator
 2. Run 'make submit-job' to start training
 3. Run 'make status' to check job status
 4. Run 'make logs' to view training logs
@@ -141,7 +141,7 @@ deployment.apps/training-operator condition met
 ✓ Kubeflow training operator installed successfully!
 
 Next steps:
-1. Run './setup.sh prepare-training' to prepare training environment
+1. Run 'make prepare-training' to prepare training environment
 2. Run 'make submit-job' to start training
 ✅ Training operator installed
 
@@ -165,14 +165,14 @@ Training Configuration:
 [19:57:26] All required directories ready:
 input/:
 total 0
-drwxr-xr-x@  2 abdhumal  staff   64  6 Jul 19:53 .
-drwxr-xr-x@ 15 abdhumal  staff  480  6 Jul 19:53 ..
+drwxr-xr-x@  2 user  staff   64  6 Jul 19:53 .
+drwxr-xr-x@ 15 user  staff  480  6 Jul 19:53 ..
 
 output/:
 total 0
-drwxr-xr-x@  3 abdhumal  staff   96  6 Jul 19:50 .
-drwxr-xr-x@ 15 abdhumal  staff  480  6 Jul 19:53 ..
-drwxr-xr-x@  4 abdhumal  staff  128  6 Jul 19:50 pytorch-single-worker-distributed_2025-07-06_19-50-14
+drwxr-xr-x@  3 user  staff   96  6 Jul 19:50 .
+drwxr-xr-x@ 15 user  staff  480  6 Jul 19:53 ..
+drwxr-xr-x@  4 user  staff  128  6 Jul 19:50 pytorch-single-worker-distributed_2025-07-06_19-50-14
 [19:57:26] Submitting distributed training job...
 pytorchjob.kubeflow.org/pytorch-single-worker-distributed created
 [19:57:26] Monitoring training progress...
@@ -268,7 +268,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_0.png
 🔢 Predicted digit: 6
@@ -285,7 +285,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_1.png
 🔢 Predicted digit: 6
@@ -302,7 +302,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_2.png
 🔢 Predicted digit: 6
@@ -319,7 +319,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_3.png
 🔢 Predicted digit: 6
@@ -336,7 +336,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_4.png
 🔢 Predicted digit: 6
@@ -353,7 +353,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_5.png
 🔢 Predicted digit: 6
@@ -370,7 +370,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_6.png
 🔢 Predicted digit: 6
@@ -387,7 +387,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_7.png
 🔢 Predicted digit: 6
@@ -404,7 +404,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_8.png
 🔢 Predicted digit: 6
@@ -421,7 +421,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 ✅ Model loaded successfully from: output/latest/trained-model.pth
 
 🔍 Running single image prediction...
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📸 Image: synthetic_9.png
 🔢 Predicted digit: 6
@@ -435,7 +435,7 @@ You can now test it with: python scripts/test_mnist_model.py --image test_images
 
 [19:59:26] Running batch inference...
 📦 Batch processing all test images:
-/Users/abdhumal/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
+/Users/user/.pyenv/versions/3.10.18/lib/python3.10/site-packages/torch/nn/functional.py:1538: UserWarning: dropout2d: Received a 2-D input to dropout2d, which is deprecated and will result in an error in a future release. To retain the behavior and silence this warning, please use dropout instead. Note that dropout2d exists to provide channel-wise dropout on inputs with 2 spatial dimensions, a channel dimension, and an optional batch dimension (i.e. 3D or 4D inputs).
   warnings.warn(warn_msg)
 📊 Batch Results Summary:
    1. Digit 6: 12.64%

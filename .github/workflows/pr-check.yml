@@ -1,0 +1,60 @@
+name: PR Check - Kind Cluster Test
+
+on:
+  pull_request:
+    branches: [ main ]
+  pull_request_target:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-on-kind:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+        
+    - name: Install kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+        
+    - name: Setup cluster and run tests
+      run: |
+        # Setup the complete environment
+        make setup
+        
+        # Run end-to-end workflow test
+        make run-e2e-workflow
+        
+    - name: Check cluster status
+      if: always()
+      run: |
+        kubectl get nodes
+        kubectl get pods --all-namespaces
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        make cleanup || true
+        kind delete cluster --name pytorch-training-cluster || true 

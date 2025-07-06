@@ -42,7 +42,7 @@ cd distributed-pytorch-training-setup
 
 ```bash
 # Detect cluster type and show information
-./setup.sh cluster-info
+make debug
 
 # Expected output:
 # ✅ Cluster detected: EKS (or GKE, AKS, minikube, etc.)
@@ -53,7 +53,7 @@ cd distributed-pytorch-training-setup
 
 ```bash
 # Check system requirements
-./setup.sh check-requirements
+make verify-system
 
 # Expected output:
 # ✅ System requirements check passed
@@ -66,7 +66,7 @@ cd distributed-pytorch-training-setup
 
 ```bash
 # Use existing cluster (skips cluster creation)
-./setup.sh use-existing
+make use-existing
 
 # Expected output:
 # ✅ Using existing cluster: EKS (my-cluster)
@@ -74,7 +74,7 @@ cd distributed-pytorch-training-setup
 # ✅ Existing cluster setup completed successfully!
 # 
 # Next steps:
-# 1. Run './setup.sh install-operator' to install training operator
+# 1. Run 'make install-operator' to install training operator
 # 2. Run 'make submit-job' to start training
 ```
 
@@ -82,7 +82,7 @@ cd distributed-pytorch-training-setup
 
 ```bash
 # Install Kubeflow training operator
-./setup.sh install-operator
+make install-operator
 
 # Expected output:
 # ✅ Installing Kubeflow training operator...
@@ -101,7 +101,7 @@ cd distributed-pytorch-training-setup
 
 ```bash
 # Prepare training environment
-./setup.sh prepare-training
+make install-operator
 
 # Expected output:
 # ✅ MNIST dataset downloaded
@@ -144,7 +144,7 @@ make watch-job
 aws eks update-kubeconfig --region us-west-2 --name my-cluster
 
 # Use existing cluster
-./setup.sh use-existing
+make use-existing
 
 # Expected cluster info:
 # Cluster Type: EKS
@@ -160,7 +160,7 @@ aws eks update-kubeconfig --region us-west-2 --name my-cluster
 gcloud container clusters get-credentials my-cluster --zone us-central1-a
 
 # Use existing cluster
-./setup.sh use-existing
+make use-existing
 
 # Expected cluster info:
 # Cluster Type: GKE
@@ -176,7 +176,7 @@ gcloud container clusters get-credentials my-cluster --zone us-central1-a
 az aks get-credentials --resource-group myResourceGroup --name myCluster
 
 # Use existing cluster
-./setup.sh use-existing
+make use-existing
 
 # Expected cluster info:
 # Cluster Type: AKS
@@ -192,7 +192,7 @@ az aks get-credentials --resource-group myResourceGroup --name myCluster
 minikube start --memory=8192 --cpus=4
 
 # Use existing cluster
-./setup.sh use-existing
+make use-existing
 
 # Expected cluster info:
 # Cluster Type: minikube

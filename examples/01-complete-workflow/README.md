@@ -26,9 +26,8 @@ This example takes you through the complete machine learning workflow:
 
 ### Option A: Full Automated Workflow (Recommended)
 ```bash
-# Run complete training + inference workflow
-cd examples/01-complete-workflow
-./run-complete-workflow.sh all
+# Run complete training + inference workflow from project root
+make run-e2e-workflow
 
 # This will:
 # 1. Set up infrastructure (cluster + dependencies)
@@ -41,19 +40,16 @@ cd examples/01-complete-workflow
 ### Option B: Step-by-Step Learning (Educational)
 ```bash
 # Phase 1: Infrastructure Setup
-./run-complete-workflow.sh setup
+make setup
 
 # Phase 2: Training Operator Installation
-./run-complete-workflow.sh install-training-operator
+make install-operator
 
 # Phase 3: Distributed Training  
-./run-complete-workflow.sh training
+make submit-job
 
-# Phase 4: Model Inference
-./run-complete-workflow.sh inference
-
-# Phase 5: Results Summary
-./run-complete-workflow.sh results
+# Phase 4: Complete Workflow (Training + Inference + Results)
+make run-e2e-workflow
 
 # Each phase shows clear next steps and handles dependencies
 ```
@@ -61,33 +57,50 @@ cd examples/01-complete-workflow
 ### Option C: Individual Components
 ```bash
 # 1. Training only
-./run-training.sh
+make submit-job          # Submit training job
 
-# 2. Inference only (requires trained model)
-./run-inference.sh
+# 2. Monitor status
+make status              # Show job status, pods, and recent events
 
-# 3. Clean up
-./cleanup.sh
+# 3. View logs
+make logs                # View master pod logs (real-time)
+
+# 4. Model inference
+make inference           # Test model with custom images (TEST_IMAGE=path or TEST_IMAGES_DIR=path)
+
+# 5. Complete workflow
+make run-e2e-workflow    # Full workflow: training + inference + results
+
+# 6. Debug issues
+make debug               # Show comprehensive debugging information
+
+# 7. Clean up
+make cleanup             # Clean up jobs and resources (keep cluster)
 ```
 
 ### Getting Help
 ```bash
-# Show all available phases and options
-./run-complete-workflow.sh help
+# Show all available commands
+make help
+
+# Show setup.sh workflow commands
+bin/setup.sh help
 
 # Environment variables for customization
-EPOCHS=10 WORKERS=3 ./run-complete-workflow.sh training
+EPOCHS=10 WORKERS=3 make submit-job
 
-# Inference customization
-TEST_IMAGE=my_digit.jpg ./run-complete-workflow.sh inference
-TEST_IMAGES_DIR=my_images/ ./run-complete-workflow.sh inference
-# Note: By default, uses examples/01-complete-workflow/test_images/ if available
-MODEL_PATH=output/older_model.pth ./run-complete-workflow.sh inference
+# Complete workflow with customization
+make run-e2e-workflow
+# Note: E2E workflow includes training, inference, and results analysis
+
+# Or test inference separately with custom images
+TEST_IMAGE=my_digit.jpg make inference
+TEST_IMAGES_DIR=my_test_images/ make inference
 ```
 
 ## 📊 Expected Results
 
-> **📋 Full Sample Output**: See [`sample-complete-workflow-output.txt`](sample-complete-workflow-output.txt) for complete console output from running `./run-complete-workflow.sh all`
+> **📋 Full Sample Output**: See [`sample-complete-workflow-output.txt`](sample-complete-workflow-output.txt) for complete console output from running `make run-e2e-workflow`
 
 ### Training Output
 ```
@@ -168,33 +181,37 @@ test_images/
 
 The inference phase supports multiple modes for flexible model testing:
 
-### 1. Default Mode (Built-in Images)
+### 1. Complete Workflow (Recommended)
 ```bash
-# Uses built-in handwritten digit images
-./run-complete-workflow.sh inference
+# Runs training + inference + results analysis
+make run-e2e-workflow
 ```
 
-### 2. Single Image Mode
+### 2. Custom Image Testing
 ```bash
-# Test a single custom image
-TEST_IMAGE=path/to/your_digit.jpg ./run-complete-workflow.sh inference
-TEST_IMAGE=my_handwritten_7.png ./run-complete-workflow.sh inference
+# Test with built-in handwritten digit images
+make inference
+
+# Test with your own single image
+TEST_IMAGE=path/to/your_digit.jpg make inference
+TEST_IMAGE=my_handwritten_7.png make inference
+
+# Test with directory of images
+TEST_IMAGES_DIR=my_test_images/ make inference
+TEST_IMAGES_DIR=/path/to/digits/ make inference
+
+# Use specific model
+MODEL_PATH=output/older_model.pth make inference
+TEST_IMAGE=my_digit.jpg MODEL_PATH=output/older_model.pth make inference
 ```
 
-### 3. Directory Mode
+### 3. Manual Model Testing (Alternative)
 ```bash
-# Test all images in a directory
-TEST_IMAGES_DIR=my_test_images/ ./run-complete-workflow.sh inference
-TEST_IMAGES_DIR=/path/to/digits/ ./run-complete-workflow.sh inference
-```
+# After training, test the model manually
+python scripts/test_mnist_model.py
 
-### 4. Custom Model
-```bash
-# Use a specific model (works with any mode above)
-MODEL_PATH=output/older_model.pth ./run-complete-workflow.sh inference
-
-# Combine with custom images
-TEST_IMAGE=my_digit.jpg MODEL_PATH=output/older_model.pth ./run-complete-workflow.sh inference
+# Test with custom image
+python scripts/test_mnist_model.py --image path/to/your_digit.jpg
 ```
 
 ### Supported Image Formats
@@ -208,7 +225,7 @@ TEST_IMAGE=my_digit.jpg MODEL_PATH=output/older_model.pth ./run-complete-workflo
 ### Modify Training Parameters
 ```bash
 # Environment variables for training
-EPOCHS=10 WORKERS=3 BATCH_SIZE=128 ./run-complete-workflow.sh training
+EPOCHS=10 WORKERS=3 BATCH_SIZE=128 make submit-job
 ```
 
 ### Use Different Model Architecture
@@ -247,15 +264,15 @@ The step-by-step approach offers several advantages:
 ### Example Learning Path
 ```bash
 # Learn infrastructure setup
-./run-complete-workflow.sh setup
+make setup
 kubectl get nodes  # Understand cluster state
 
 # Experiment with training parameters
-EPOCHS=3 ./run-complete-workflow.sh training
-EPOCHS=10 ./run-complete-workflow.sh training  # Compare results
+EPOCHS=3 make submit-job
+EPOCHS=10 make submit-job  # Compare results
 
 # Test different models
-./run-complete-workflow.sh inference  # Test latest model
+make run-e2e-workflow  # Complete workflow including inference
 python scripts/test_mnist_model.py --model output/older_model.pth  # Compare models
 ```
 
@@ -264,23 +281,23 @@ python scripts/test_mnist_model.py --model output/older_model.pth  # Compare mod
 ### Test with Your Own Images
 ```bash
 # Single handwritten digit
-TEST_IMAGE=my_handwritten_digit.jpg ./run-complete-workflow.sh inference
+python scripts/test_mnist_model.py --image my_handwritten_digit.jpg
 
 # Directory of your images
 mkdir my_test_digits
 # Add your images to my_test_digits/
-TEST_IMAGES_DIR=my_test_digits/ ./run-complete-workflow.sh inference
+python scripts/test_mnist_model.py --images my_test_digits/
 ```
 
 ### Compare Different Models
 ```bash
 # Train multiple models with different parameters
-EPOCHS=5 ./run-complete-workflow.sh training   # Quick model
-EPOCHS=20 ./run-complete-workflow.sh training  # Better model
+EPOCHS=5 make submit-job   # Quick model
+EPOCHS=20 make submit-job  # Better model
 
 # Test the same images with different models
-TEST_IMAGE=my_digit.jpg MODEL_PATH=output/pytorch-single-worker-distributed_TIMESTAMP1/trained-model.pth ./run-complete-workflow.sh inference
-TEST_IMAGE=my_digit.jpg MODEL_PATH=output/pytorch-single-worker-distributed_TIMESTAMP2/trained-model.pth ./run-complete-workflow.sh inference
+python scripts/test_mnist_model.py --image my_digit.jpg --model output/pytorch-single-worker-distributed_TIMESTAMP1/trained-model.pth
+python scripts/test_mnist_model.py --image my_digit.jpg --model output/pytorch-single-worker-distributed_TIMESTAMP2/trained-model.pth
 ```
 
 
@@ -288,8 +305,8 @@ TEST_IMAGE=my_digit.jpg MODEL_PATH=output/pytorch-single-worker-distributed_TIME
 ### Performance Benchmarking
 ```bash
 # Test inference speed with different image sets
-time TEST_IMAGES_DIR=small_set/ ./run-complete-workflow.sh inference
-time TEST_IMAGES_DIR=large_set/ ./run-complete-workflow.sh inference
+time python scripts/test_mnist_model.py --images small_set/
+time python scripts/test_mnist_model.py --images large_set/
 ```
 
 ## 🐛 Troubleshooting

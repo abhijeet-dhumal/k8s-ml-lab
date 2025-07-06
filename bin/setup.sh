@@ -14,6 +14,14 @@ KUBEFLOW_VERSION="v1.7.0"
 KUBECTL_VERSION="v1.28.0"
 KIND_VERSION="v0.20.0"
 
+# Workflow configuration
+EPOCHS=${EPOCHS:-5}
+WORKERS=${WORKERS:-2}
+BATCH_SIZE=${BATCH_SIZE:-64}
+LEARNING_RATE=${LEARNING_RATE:-0.001}
+JOB_TIMEOUT=${JOB_TIMEOUT:-600}  # 10 minutes
+JOB_NAME="pytorch-single-worker-distributed"
+
 # Cluster type detection
 USE_EXISTING_CLUSTER=false
 CLUSTER_TYPE=""
@@ -108,12 +116,17 @@ detect_package_manager() {
 check_system_requirements() {
     log "Checking system requirements..."
     
-    # Check if we're on Linux and have the minimum requirements
+    # Check memory (minimum 8GB, recommended 16GB)
+    local mem_gb=0
     if [[ "$OS" == "linux" ]]; then
-        # Check memory (minimum 8GB, recommended 16GB)
         local mem_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-        local mem_gb=$((mem_kb / 1024 / 1024))
-        
+        mem_gb=$((mem_kb / 1024 / 1024))
+    elif [[ "$OS" == "darwin" ]]; then
+        local mem_bytes=$(sysctl -n hw.memsize)
+        mem_gb=$((mem_bytes / 1024 / 1024 / 1024))
+    fi
+    
+    if [[ $mem_gb -gt 0 ]]; then
         if [[ $mem_gb -lt 8 ]]; then
             error "Insufficient memory: ${mem_gb}GB found, minimum 8GB required"
         elif [[ $mem_gb -lt 16 ]]; then
@@ -121,22 +134,51 @@ check_system_requirements() {
         else
             success "Memory: ${mem_gb}GB (sufficient)"
         fi
-        
-        # Check CPU cores (minimum 4 cores)
-        local cpu_cores=$(nproc)
+    else
+        warn "Memory: Unable to detect memory size"
+    fi
+    
+    # Check CPU cores (minimum 4 cores)
+    local cpu_cores=0
+    if [[ "$OS" == "linux" ]]; then
+        cpu_cores=$(nproc)
+    elif [[ "$OS" == "darwin" ]]; then
+        cpu_cores=$(sysctl -n hw.ncpu)
+    fi
+    
+    if [[ $cpu_cores -gt 0 ]]; then
         if [[ $cpu_cores -lt 4 ]]; then
             error "Insufficient CPU cores: ${cpu_cores} found, minimum 4 required"
         else
             success "CPU cores: ${cpu_cores} (sufficient)"
         fi
-        
-        # Check disk space (minimum 10GB free)
-        local disk_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+    else
+        warn "CPU cores: Unable to detect CPU cores"
+    fi
+    
+    # Check disk space (minimum 10GB free)
+    local disk_space_gb=0
+    if [[ "$OS" == "linux" ]]; then
+        disk_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+    elif [[ "$OS" == "darwin" ]]; then
+        # macOS df output format is different, use -h and parse
+        local disk_space_raw=$(df -h . | awk 'NR==2 {print $4}')
+        if [[ $disk_space_raw == *"G"* ]]; then
+            disk_space_gb=$(echo $disk_space_raw | sed 's/G.*//')
+        elif [[ $disk_space_raw == *"T"* ]]; then
+            local disk_space_tb=$(echo $disk_space_raw | sed 's/T.*//')
+            disk_space_gb=$((disk_space_tb * 1024))
+        fi
+    fi
+    
+    if [[ $disk_space_gb -gt 0 ]]; then
         if [[ $disk_space_gb -lt 10 ]]; then
             error "Insufficient disk space: ${disk_space_gb}GB free, minimum 10GB required"
         else
             success "Disk space: ${disk_space_gb}GB free (sufficient)"
         fi
+    else
+        warn "Disk space: Unable to detect free disk space"
     fi
     
     success "System requirements check passed"
@@ -797,6 +839,605 @@ check_requirements() {
     success "System requirements check completed!"
 }
 
+# Comprehensive system verification
+verify_system() {
+    log "Running comprehensive system verification..."
+    
+    detect_os
+    detect_package_manager
+    check_system_requirements
+    
+    # Check all required dependencies
+    local all_deps_ok=true
+    
+    # Check container runtime
+    if command -v docker &> /dev/null; then
+        if docker info &> /dev/null; then
+            success "Docker: installed and running"
+        else
+            warn "Docker: installed but not running"
+            all_deps_ok=false
+        fi
+    elif command -v podman &> /dev/null; then
+        success "Podman: installed"
+    else
+        warn "Container runtime: neither Docker nor Podman found"
+        all_deps_ok=false
+    fi
+    
+    # Check Python
+    if command -v python3 &> /dev/null; then
+        local py_version=$(python3 --version 2>&1 | awk '{print $2}')
+        success "Python: $py_version"
+    else
+        warn "Python: not found"
+        all_deps_ok=false
+    fi
+    
+    # Check kubectl
+    if command -v kubectl &> /dev/null; then
+        local kubectl_version=$(kubectl version --client --short 2>/dev/null | awk '{print $3}' || echo "unknown")
+        success "kubectl: $kubectl_version"
+    else
+        warn "kubectl: not found"
+        all_deps_ok=false
+    fi
+    
+    # Check kind
+    if command -v kind &> /dev/null; then
+        local kind_version=$(kind version 2>/dev/null | awk '{print $2}' || echo "unknown")
+        success "kind: $kind_version"
+    else
+        warn "kind: not found"
+        all_deps_ok=false
+    fi
+    
+    # Check Python dependencies
+    if python3 -c "import torch, torchvision, requests, yaml" &> /dev/null; then
+        success "Python dependencies: PyTorch, torchvision, requests, PyYAML installed"
+    else
+        warn "Python dependencies: some required packages missing"
+        all_deps_ok=false
+    fi
+    
+    # Check cluster accessibility (if configured)
+    if kubectl cluster-info &> /dev/null; then
+        success "Kubernetes cluster: accessible"
+        
+        # Check if Kubeflow operator is installed
+        if kubectl get crd pytorchjobs.kubeflow.org &> /dev/null; then
+            success "Kubeflow Training Operator: installed"
+        else
+            warn "Kubeflow Training Operator: not installed"
+        fi
+    else
+        warn "Kubernetes cluster: not accessible (this is OK if not set up yet)"
+    fi
+    
+    echo ""
+    if [[ "$all_deps_ok" == "true" ]]; then
+        success "System verification completed - all dependencies are ready!"
+        echo ""
+        echo "Next steps:"
+        echo "1. Run 'make submit-job' to start training"
+        echo "2. Or run 'make run-e2e-workflow' for complete workflow"
+    else
+        warn "System verification found missing dependencies"
+        echo ""
+        echo "To install missing dependencies:"
+        echo "1. Run 'make install-deps' to install basic dependencies"
+        echo "2. Run 'make setup-training' to install operators and prepare environment"
+        echo "3. Run 'make verify-system' again to recheck"
+    fi
+}
+
+# ==============================================================================
+# WORKFLOW FUNCTIONS
+# ==============================================================================
+
+# Enhanced section function for better formatting
+section() {
+    echo
+    echo -e "${BLUE}🚀 $1${NC}"
+    echo -e "${BLUE}$(printf '=%.0s' {1..50})${NC}"
+}
+
+# Submit and monitor training job
+submit_and_monitor_job() {
+    section "Distributed Training Job"
+
+    echo "Training Configuration:"
+    echo "  📊 Epochs: $EPOCHS"
+    echo "  👥 Workers: $WORKERS" 
+    echo "  📦 Batch Size: $BATCH_SIZE"
+    echo "  📈 Learning Rate: $LEARNING_RATE"
+    echo "  ⏱️  Timeout: $JOB_TIMEOUT seconds"
+    echo
+
+    log "Cleaning up any existing jobs..."
+    kubectl delete pytorchjob "$JOB_NAME" --ignore-not-found=true
+    sleep 5
+
+    log "Preparing required directories..."
+    mkdir -p input output scripts
+    
+    # Ensure directories exist for Kind volume mounts
+    if [[ ! -d "scripts" ]]; then
+        error "scripts/ directory not found. Required for Kind volume mount."
+    fi
+    if [[ ! -d "input" ]]; then
+        warn "input/ directory not found. Creating it now..."
+        mkdir -p input
+    fi
+    if [[ ! -d "output" ]]; then
+        warn "output/ directory not found. Creating it now..."
+        mkdir -p output
+    fi
+    
+    # Check if training script exists
+    if [[ ! -f "scripts/distributed_mnist_training.py" ]]; then
+        error "Training script not found: scripts/distributed_mnist_training.py"
+    fi
+    
+    # Download MNIST dataset if not already present
+    if [[ ! -d "input/MNIST" ]]; then
+        log "Downloading MNIST dataset..."
+        download_mnist
+    else
+        log "MNIST dataset already exists in input/"
+    fi
+    
+    log "All required directories ready:"
+    ls -la scripts/ input/ output/ | head -10
+
+    log "Submitting distributed training job..."
+    kubectl apply -f configs/pytorch-distributed-job.yaml
+
+    success "Training job submitted successfully!"
+}
+
+# Monitor job progress
+monitor_job() {
+    section "Job Progress Monitoring"
+
+    log "Monitoring training progress... (detailed status every 30s)"
+    counter=0
+    while true; do
+        # Check if job exists
+        if ! kubectl get pytorchjob "$JOB_NAME" &> /dev/null; then
+            error "Training job not found"
+        fi
+        
+        # Get job status
+        status=$(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.conditions[?(@.type=="Succeeded")].status}' 2>/dev/null || echo "")
+        failed_status=$(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "")
+        
+        # Check completion
+        if [[ "$status" == "True" ]]; then
+            success "PyTorchJob completed successfully!"
+            
+            # Verify training actually succeeded by checking pod logs
+            log "Verifying training success..."
+            master_pod=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -n "$master_pod" ]]; then
+                # Check if training script completed successfully
+                if kubectl logs "$master_pod" | grep -q "Distributed training completed successfully"; then
+                    success "Training script completed successfully!"
+                else
+                    warn "PyTorchJob succeeded but training script may have issues. Check logs."
+                fi
+                
+                # Check if model was saved
+                if kubectl exec "$master_pod" -- test -f /output/trained-model.pth 2>/dev/null; then
+                    success "Model file found in pod!"
+                else
+                    warn "Model file not found in pod - training may not have saved properly"
+                fi
+            else
+                warn "Cannot verify training success - master pod not found"
+            fi
+            
+            echo ""  # New line after progress dots
+            break
+        elif [[ "$failed_status" == "True" ]]; then
+            echo ""  # New line after progress dots
+            # Get failure reason
+            failure_reason=$(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.conditions[?(@.type=="Failed")].message}' 2>/dev/null || echo "Unknown")
+            error "Training job failed: $failure_reason"
+        elif [[ $counter -ge $JOB_TIMEOUT ]]; then
+            echo ""  # New line after progress dots
+            error "Training timeout after $JOB_TIMEOUT seconds"
+        fi
+        
+        # Show minimal progress
+        if [[ $((counter % 30)) -eq 0 ]]; then
+            current_status=$(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.conditions[?(@.type=="Running")].status}' 2>/dev/null || echo "")
+            job_state=$(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.metadata.name}' 2>/dev/null && echo " (Running)" || echo " (Starting...)")
+            echo "⏱️  Training: ${counter}s - Status: ${job_state}"
+            
+            # Only show pod details if there are issues
+            failing_pods=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME" --field-selector=status.phase=Failed -o name 2>/dev/null || true)
+            pending_pods=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME" --field-selector=status.phase=Pending -o name 2>/dev/null || true)
+            
+            if [[ -n "$failing_pods" ]]; then
+                warn "Failed pods detected: $failing_pods"
+            elif [[ -n "$pending_pods" ]]; then
+                warn "Pods still pending: $pending_pods"
+            fi
+        else
+            # Simple progress dots
+            echo -n "."
+        fi
+        
+        sleep 15
+        counter=$((counter + 15))
+    done
+}
+
+# Collect training artifacts
+collect_artifacts() {
+    section "Collecting Training Artifacts"
+
+    # Collect training artifacts
+    timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
+    output_dir="output/${JOB_NAME}_${timestamp}"
+    mkdir -p "$output_dir"
+    
+    # Brief final status
+    log "Final training status:"
+    kubectl get pytorchjob "$JOB_NAME" -o custom-columns=NAME:.metadata.name,STATE:.status.conditions[-1].type,AGE:.metadata.creationTimestamp --no-headers 2>/dev/null || true
+
+    # Collect logs from pods
+    log "Collecting pod logs..."
+    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master > "$output_dir/master-pod-logs.txt" 2>/dev/null || warn "Could not collect master pod logs"
+    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=worker > "$output_dir/worker-pod-logs.txt" 2>/dev/null || warn "Could not collect worker pod logs"
+
+    # Get pod names (pods should be available with cleanPodPolicy: None)
+    master_pod=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    
+    # Collect model artifacts from mounted volumes and pod
+    log "Collecting model artifacts..."
+    
+    # Try volume mount first (preferred)
+    if [[ -f "output/trained-model.pth" ]]; then
+        log "Found model in mounted volume, moving to job directory..."
+        mv "output/trained-model.pth" "$output_dir/trained-model.pth"
+        success "Model moved from volume mount: $(ls -lh "$output_dir/trained-model.pth" | awk '{print $5}')"
+    elif [[ -n "$master_pod" ]]; then
+        # Fallback to pod copy if volume mount fails
+        log "Copying model from pod: $master_pod"
+        if kubectl cp "$master_pod":/output/trained-model.pth "$output_dir/trained-model.pth" 2>/dev/null; then
+            success "Model copied from pod: $(ls -lh "$output_dir/trained-model.pth" | awk '{print $5}')"
+        else
+            error "Failed to collect model from both volume mount and pod. Check logs: kubectl logs $master_pod"
+        fi
+    else
+        error "No model found in volume mount and no pod available for copying"
+    fi
+    
+    # Collect training metadata
+    if [[ -f "output/training_metadata.txt" ]]; then
+        mv "output/training_metadata.txt" "$output_dir/training_metadata.txt"
+        log "Training metadata moved from mounted volume"
+    elif [[ -n "$master_pod" ]]; then
+        kubectl cp "$master_pod":/output/training_metadata.txt "$output_dir/training_metadata.txt" 2>/dev/null || \
+        warn "Could not collect training metadata from pod"
+    else
+        warn "Training metadata not found in volume mount or pod"
+    fi
+
+    # Create job summary
+    cat > "$output_dir/job-info.txt" << EOF
+Training Job Summary
+===================
+Job Name: $JOB_NAME
+Timestamp: $timestamp
+Output Directory: $output_dir
+Configuration:
+  - Epochs: $EPOCHS
+  - Workers: $WORKERS
+  - Batch Size: $BATCH_SIZE
+  - Learning Rate: $LEARNING_RATE
+
+Status: $(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+Completion Time: $(date)
+EOF
+
+    # Create symlink to latest
+    rm -f output/latest
+    ln -sf "${JOB_NAME}_${timestamp}" output/latest
+
+    success "Training artifacts saved to: $output_dir"
+    echo "Latest results symlink: output/latest -> output/${JOB_NAME}_${timestamp}"
+}
+
+# Run model inference
+run_inference() {
+    section "Model Inference Testing"
+
+    # Determine model path
+    model_path=""
+    if [[ -n "$MODEL_PATH" ]]; then
+        # Use user-specified model
+        if [[ -f "$MODEL_PATH" ]]; then
+            model_path="$MODEL_PATH"
+            log "Using specified model: $model_path"
+        else
+            error "Specified model not found: $MODEL_PATH"
+        fi
+    else
+        # Auto-detect latest model
+        if [[ -f "output/latest/trained-model.pth" ]]; then
+            model_path="output/latest/trained-model.pth"
+        else
+            # Look for most recent model
+            latest_dir=$(ls -t output/pytorch-single-worker-distributed_* 2>/dev/null | head -1 || echo "")
+            if [[ -n "$latest_dir" && -f "output/$latest_dir/trained-model.pth" ]]; then
+                model_path="output/$latest_dir/trained-model.pth"
+            fi
+        fi
+        
+        if [[ -z "$model_path" ]]; then
+            error "No trained model found! Run training first with 'make submit-job'"
+        fi
+        
+        log "Auto-detected model: $model_path"
+    fi
+
+    success "Using model: $model_path"
+
+    # Handle test images
+    if [[ -n "$TEST_IMAGE" ]]; then
+        # Single test image
+        if [[ -f "$TEST_IMAGE" ]]; then
+            log "Testing single image: $TEST_IMAGE"
+            echo "📸 Testing $(basename "$TEST_IMAGE"):"
+            python scripts/test_mnist_model.py --image "$TEST_IMAGE" --model "$model_path" || warn "Failed to test $TEST_IMAGE"
+        else
+            error "Test image not found: $TEST_IMAGE"
+        fi
+    else
+        # Use test images directories
+        workflow_test_images="examples/01-complete-workflow/test_images"
+        root_test_images="test_images"
+        
+        # Priority order for test images directory selection
+        if [[ -d "$workflow_test_images" && $(ls "$workflow_test_images"/*.{jpg,jpeg,png,gif} 2>/dev/null | wc -l) -gt 0 ]]; then
+            test_images_dir="$workflow_test_images"
+            log "Using existing test images from $test_images_dir"
+        elif [[ -d "$root_test_images" && $(ls "$root_test_images"/*.{jpg,jpeg,png,gif} 2>/dev/null | wc -l) -gt 0 ]]; then
+            test_images_dir="$root_test_images"
+            log "Using test images from $test_images_dir"
+        else
+            test_images_dir="$root_test_images"
+            mkdir -p "$test_images_dir"
+            log "Created $test_images_dir/ directory for your test images"
+        fi
+
+        # Check if any test images exist
+        if [[ $(ls "$test_images_dir"/*.{jpg,jpeg,png,gif} 2>/dev/null | wc -l) -eq 0 ]]; then
+            warn "No test images found in $test_images_dir/. Skipping inference testing."
+            echo "📸 To test inference, add your own handwritten digit images to $test_images_dir/"
+            echo "   Or use: TEST_IMAGE=your_image.png make run-inference"
+            return
+        fi
+
+        # Test with available images
+        log "Testing with images from $test_images_dir/..."
+        for img in "$test_images_dir"/*.{jpg,jpeg,png,gif}; do
+            if [[ -f "$img" ]]; then
+                echo "📸 Testing $(basename "$img"):"
+                python scripts/test_mnist_model.py --image "$img" --model "$model_path" || warn "Failed to test $img"
+                echo
+            fi
+        done
+
+        # Test batch processing
+        log "Running batch inference..."
+        echo "📦 Batch processing all test images:"
+        output_dir=$(dirname "$model_path")
+        python scripts/test_mnist_model.py --batch "$test_images_dir/" --model "$model_path" > "$output_dir/inference-results.txt" || warn "Batch processing failed"
+
+        # Display batch results
+        if [[ -f "$output_dir/inference-results.txt" ]]; then
+            echo "📊 Batch Results Summary:"
+            tail -10 "$output_dir/inference-results.txt" || true
+        fi
+    fi
+
+    success "Model inference completed"
+}
+
+# Show training results and summary
+show_results() {
+    section "Training Results Summary"
+
+    # Find latest output directory
+    output_dir=""
+    if [[ -L "output/latest" ]]; then
+        output_dir="output/$(readlink output/latest)"
+    else
+        latest_dir=$(ls -t output/pytorch-single-worker-distributed_* 2>/dev/null | head -1 || echo "")
+        if [[ -n "$latest_dir" ]]; then
+            output_dir="output/$latest_dir"
+        fi
+    fi
+
+    if [[ -z "$output_dir" || ! -d "$output_dir" ]]; then
+        error "No training results found! Run training first with 'make submit-job'"
+    fi
+
+    echo "🎯 Complete Workflow Results:"
+    echo "============================="
+    echo
+    echo "📁 Training Artifacts:"
+    echo "  📍 Location: $output_dir"
+    if [[ -f "$output_dir/trained-model.pth" ]]; then
+        echo "  🏷️  Model: $(ls -lh "$output_dir/trained-model.pth" | awk '{print $5}') trained-model.pth"
+    fi
+    echo "  📋 Logs: master-pod-logs.txt, worker-pod-logs.txt"
+    echo "  📊 Metadata: training_metadata.txt"
+    echo
+
+    echo "🔍 Inference Results:"
+    # Use same logic to find test images directory
+    workflow_test_images="examples/01-complete-workflow/test_images"
+    root_test_images="test_images"
+    
+    if [[ -d "$workflow_test_images" && $(ls "$workflow_test_images"/*.{jpg,jpeg,png,gif} 2>/dev/null | wc -l) -gt 0 ]]; then
+        test_images_dir="$workflow_test_images"
+    elif [[ -d "$root_test_images" && $(ls "$root_test_images"/*.{jpg,jpeg,png,gif} 2>/dev/null | wc -l) -gt 0 ]]; then
+        test_images_dir="$root_test_images"
+    else
+        test_images_dir="$root_test_images"
+    fi
+    
+    if [[ -d "$test_images_dir" ]]; then
+        echo "  📸 Test Images: $(ls "$test_images_dir"/*.{jpg,jpeg,png,gif} 2>/dev/null | wc -l) images tested from $test_images_dir"
+    fi
+    if [[ -f "$output_dir/inference-results.txt" ]]; then
+        echo "  📦 Batch Results: $output_dir/inference-results.txt"
+    fi
+    echo
+
+    echo "📈 Training Summary:"
+    if [[ -f "$output_dir/training_metadata.txt" ]]; then
+        grep -E "(Final|Test) Accuracy|Loss" "$output_dir/training_metadata.txt" 2>/dev/null || echo "  Training metrics saved to training_metadata.txt"
+    else
+        echo "  Training completed successfully (see logs for details)"
+    fi
+    echo
+
+    echo "🔗 Next Steps:"
+    echo "  1. Review training logs: cat $output_dir/master-pod-logs.txt"
+    if [[ -f "$output_dir/trained-model.pth" ]]; then
+        echo "  2. Test with your images: TEST_IMAGE=your_image.png make run-inference"
+    fi
+    echo "  3. Try other examples: ls examples/"
+    echo "  4. Scale up training: edit configs/pytorch-distributed-job.yaml (increase workers)"
+    echo
+
+    success "🎉 Workflow results displayed!"
+}
+
+# Debug training job
+debug_training() {
+    section "Training Debug Information"
+    
+    log "Checking cluster status..."
+    echo "Cluster info:"
+    kubectl cluster-info || warn "Cluster not accessible"
+    echo
+    
+    log "Checking training operator..."
+    echo "Training operator status:"
+    kubectl get deployment -n kubeflow training-operator 2>/dev/null || warn "Training operator not found"
+    echo
+    
+    log "Checking PyTorchJob status..."
+    if kubectl get pytorchjob "$JOB_NAME" &>/dev/null; then
+        echo "PyTorchJob status:"
+        kubectl get pytorchjob "$JOB_NAME" -o yaml
+        echo
+        
+        echo "PyTorchJob conditions:"
+        kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.conditions[*]}' | jq '.' 2>/dev/null || \
+        kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.conditions[*]}'
+        echo
+    else
+        warn "PyTorchJob '$JOB_NAME' not found"
+    fi
+    
+    log "Checking pods..."
+    if kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME" &>/dev/null; then
+        echo "Pod status:"
+        kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME" -o wide
+        echo
+        
+        echo "Pod descriptions:"
+        kubectl describe pods -l training.kubeflow.org/job-name="$JOB_NAME"
+        echo
+        
+        echo "Pod logs:"
+        for pod in $(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME" -o name); do
+            echo "--- Logs for $pod ---"
+            kubectl logs "$pod" --tail=50 || warn "Could not get logs for $pod"
+            echo
+        done
+    else
+        warn "No pods found for job '$JOB_NAME'"
+    fi
+    
+    log "Checking output directory..."
+    echo "Output directory contents:"
+    ls -la output/ 2>/dev/null || warn "output/ directory not found"
+    echo
+    
+    log "Checking training script..."
+    echo "Training script location:"
+    ls -la scripts/distributed_mnist_training.py 2>/dev/null || warn "Training script not found"
+    echo
+    
+    log "Checking PyTorchJob configuration..."
+    echo "PyTorchJob YAML:"
+    cat configs/pytorch-distributed-job.yaml
+    echo
+    
+    success "Debug information collected"
+    echo
+    echo "🎯 Common issues to check:"
+    echo "  • Pod failed to start: Check pod descriptions above"
+    echo "  • Training script error: Check pod logs above"
+    echo "  • Model not saved: Check if /output directory is writable in pod"
+    echo "  • Volume mount issues: Check Kind cluster extraMounts configuration"
+    echo "  • Training operator issues: Check operator deployment status"
+    echo
+    echo "🔧 Debugging commands:"
+    echo "  • Watch job status: kubectl get pytorchjob $JOB_NAME -w"
+    echo "  • Watch pod status: kubectl get pods -l training.kubeflow.org/job-name=$JOB_NAME -w"
+    echo "  • Stream logs: kubectl logs -f <pod-name>"
+    echo "  • Exec into pod: kubectl exec -it <pod-name> -- /bin/bash"
+    echo "  • Check events: kubectl get events --sort-by=.metadata.creationTimestamp"
+}
+
+# Run complete workflow
+run_complete_workflow() {
+    section "Complete ML Workflow: Training + Inference"
+    echo "Configuration:"
+    echo "  📊 Epochs: $EPOCHS"
+    echo "  👥 Workers: $WORKERS" 
+    echo "  📦 Batch Size: $BATCH_SIZE"
+    echo "  📈 Learning Rate: $LEARNING_RATE"
+    echo "  ⏱️  Timeout: $JOB_TIMEOUT seconds"
+    echo
+    
+    # Phase 1: Infrastructure Setup
+    log "Phase 1: Infrastructure Setup"
+    if ! kubectl cluster-info &> /dev/null; then
+        log "No cluster found, creating Kind cluster..."
+        create_cluster_only
+    else
+        success "Cluster already available"
+    fi
+    
+    # Phase 2: Training Operator Installation
+    log "Phase 2: Training Operator Installation"
+    install_operator_only
+    
+    # Phase 3: Distributed Training
+    submit_and_monitor_job
+    monitor_job
+    collect_artifacts
+    
+    # Phase 4: Model Inference
+    run_inference
+    
+    # Phase 5: Results Summary
+    show_results
+    
+    success "🎉 Complete workflow finished successfully!"
+}
+
 # Handle script arguments
 case "${1:-}" in
     "")
@@ -823,6 +1464,9 @@ case "${1:-}" in
     "check-requirements")
         check_requirements
         ;;
+    "verify-system")
+        verify_system
+        ;;
     "validate")
         validate_setup
         ;;
@@ -833,6 +1477,27 @@ case "${1:-}" in
     "cluster-info")
         print_cluster_info
         ;;
+    "submit-job")
+        submit_and_monitor_job
+        ;;
+    "monitor-job")
+        monitor_job
+        ;;
+    "collect-artifacts")
+        collect_artifacts
+        ;;
+    "run-inference")
+        run_inference
+        ;;
+    "show-results")
+        show_results
+        ;;
+    "debug-training")
+        debug_training
+        ;;
+    "run-workflow")
+        run_complete_workflow
+        ;;
     *)
         echo "Usage: $0 [command]"
         echo ""
@@ -842,6 +1507,7 @@ case "${1:-}" in
         echo "  cluster-only        - Create cluster (prompt for existing vs new)"
         echo "  use-existing        - Use existing cluster (skip cluster creation)"
         echo "  check-requirements  - Check system requirements only"
+        echo "  verify-system       - Comprehensive system and dependency verification"
         echo ""
         echo "Training Commands:"
         echo "  install-operator    - Install Kubeflow training operator only"
@@ -849,12 +1515,22 @@ case "${1:-}" in
         echo "  setup-training      - Complete training setup (operator + environment)"
         echo "  download-mnist      - Download MNIST dataset only"
         echo ""
+        echo "Workflow Commands:"
+        echo "  submit-job          - Submit and monitor distributed training job"
+        echo "  monitor-job         - Monitor existing training job progress"
+        echo "  collect-artifacts   - Collect training artifacts (model, logs, metadata)"
+        echo "  run-inference       - Run model inference on test images"
+        echo "  show-results        - Display comprehensive training results summary"
+        echo "  debug-training      - Show detailed debug information for training issues"
+        echo "  run-workflow        - Run complete end-to-end workflow (all phases)"
+        echo ""
         echo "Utility Commands:"
         echo "  validate            - Validate existing cluster setup"
         echo "  cluster-info        - Show cluster information"
         echo ""
         echo "Examples:"
         echo "  ./setup.sh                    # Full setup with prompts"
+        echo "  ./setup.sh verify-system      # Check all dependencies and readiness"
         echo "  ./setup.sh use-existing       # Use existing cluster"
         echo "  ./setup.sh install-operator  # Install operator on existing cluster"
         exit 1

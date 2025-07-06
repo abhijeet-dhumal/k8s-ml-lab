@@ -44,8 +44,8 @@ This directory contains detailed documentation, advanced examples, and troublesh
 git clone https://github.com/<your-username>/distributed-pytorch-training-setup.git
 cd distributed-pytorch-training-setup
 
-# Install all dependencies automatically
-./setup.sh install-deps
+# Complete setup (includes dependency installation)
+make setup
 
 # This will install:
 # - Docker/Podman (container runtime)
@@ -84,11 +84,10 @@ chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
 
 **Option A: Full automated setup (recommended)**
 ```bash
-./setup.sh                    # Setup infrastructure (cluster + dependencies)
-./setup.sh setup-training     # Setup training environment (operator + dataset)
+make setup                    # Complete setup: cluster + dependencies + training environment
 # This will:
 # - Check system requirements and install dependencies
-# - Detect existing cluster or create new Kind cluster
+# - Create new Kind cluster (or detect existing)
 # - Install Kubeflow training operator
 # - Download MNIST dataset and create ConfigMap
 # - Validate complete setup
@@ -96,21 +95,18 @@ chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
 
 **Option B: Use existing cluster (EKS, GKE, AKS, minikube, etc.)**
 ```bash
-./setup.sh use-existing       # Use existing cluster
-./setup.sh install-operator   # Install training operator
-./setup.sh prepare-training   # Prepare training environment
+make use-existing             # Use existing cluster + complete training setup
 # This will:
 # - Detect and validate existing cluster
 # - Install training operator on existing cluster
 # - Download dataset and prepare ConfigMap
 ```
 
-**Option C: Modular setup (infrastructure separate from training)**
+**Option C: Modular setup (for advanced users)**
 ```bash
-./setup.sh install-deps       # Install dependencies only
-./setup.sh cluster-only       # Create cluster (prompt for existing vs new)
-./setup.sh install-operator   # Install training operator
-./setup.sh prepare-training   # Prepare training environment
+make verify-system            # Check system requirements and dependencies
+make install-operator         # Install training operator only
+# Note: Use 'make setup' for complete automated setup
 ```
 
 ## 🔧 Architecture
@@ -214,10 +210,10 @@ kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.allocatable.
 kubectl cluster-info
 
 # Use existing cluster automatically
-./setup.sh use-existing
+make use-existing
 
 # Or let setup detect and prompt
-./setup.sh
+make setup
 ```
 
 ### Cluster-Specific Setup Examples
@@ -228,7 +224,7 @@ kubectl cluster-info
 aws eks update-kubeconfig --region us-west-2 --name my-cluster
 
 # Use existing EKS cluster
-./setup.sh use-existing
+make use-existing
 ```
 
 **Google GKE:**
@@ -237,7 +233,7 @@ aws eks update-kubeconfig --region us-west-2 --name my-cluster
 gcloud container clusters get-credentials my-cluster --zone us-central1-a
 
 # Use existing GKE cluster
-./setup.sh use-existing
+make use-existing
 ```
 
 **Azure AKS:**
@@ -246,7 +242,7 @@ gcloud container clusters get-credentials my-cluster --zone us-central1-a
 az aks get-credentials --resource-group myResourceGroup --name myAKSCluster
 
 # Use existing AKS cluster
-./setup.sh use-existing
+make use-existing
 ```
 
 **Minikube:**
@@ -255,7 +251,7 @@ az aks get-credentials --resource-group myResourceGroup --name myAKSCluster
 minikube start
 
 # Use existing minikube cluster
-./setup.sh use-existing
+make use-existing
 ```
 
 ### Cluster Requirements
@@ -277,7 +273,7 @@ kubectl auth can-i create namespaces
 kubectl auth can-i create deployments
 
 # Check cluster compatibility
-./setup.sh check-requirements
+make verify-system
 ```
 
 ## 🐧 Linux-Specific Notes
@@ -355,56 +351,37 @@ docker system df
 
 ### Infrastructure Setup
 ```bash
-make setup               # Full infrastructure setup (cluster + dependencies)
-make install-deps        # Install dependencies only
-make cluster-only        # Create cluster (prompt for existing vs new)
+make setup               # Complete infrastructure setup (cluster + dependencies + training env)
 make use-existing        # Use existing cluster
-make detect-cluster      # Detect and show cluster info
-make check-system        # Check system requirements
+make verify-system       # Comprehensive system and dependency verification
 ```
 
 ### Training Environment Setup
 ```bash
-make install-operator    # Install Kubeflow training operator only
-make prepare-training    # Prepare training environment (ConfigMap + dataset)
-make setup-training      # Complete training setup (operator + environment)
+make install-operator    # Install Kubeflow training operator only (standalone)
 ```
 
 ### Job Management (Works with any cluster)
 ```bash
 make submit-job          # Submit training job
-make status              # Show job status
-make logs                # Show master pod logs
-make logs-worker         # Show worker pod logs
-make restart-job         # Restart training job
-make delete-job          # Delete training job
+make run-e2e-workflow    # Run complete end-to-end workflow (training + inference + results)
+make inference           # Run model inference on test images (TEST_IMAGE=path or TEST_IMAGES_DIR=path)
+make status              # Show job status, pods, and recent events
+make logs                # Show master pod logs (real-time)
+make restart             # Restart training job (delete + submit)
 ```
 
 ### Monitoring & Debugging (Works with any cluster)
 ```bash
-make watch-pods          # Watch pods in real-time
-make debug               # Show debugging information
-make exec-master         # Shell into master pod
-make exec-worker         # Shell into worker pod
-make events              # Show recent cluster events
+make debug               # Show comprehensive debugging information
 ```
 
-### Kind Cluster Management (Kind-specific only)
-> **⚠️ Never use these commands with existing clusters (EKS, GKE, AKS, etc.)** - they will try to delete your cluster!
-
+### Cleanup (Works with any cluster)
 ```bash
-make create-cluster      # Create new kind cluster
-make delete-cluster      # Delete kind cluster
-make cleanup-all         # Clean up everything + cluster
-make reset               # Reset: delete job, recreate cluster, submit job
+make cleanup             # Clean up jobs and resources (keep cluster)
+make cleanup-all         # Delete entire Kind cluster and all resources
 ```
-
-### General Cleanup (Works with any cluster)
-> **✅ Safe to use with existing clusters** - only removes training jobs and resources, not the cluster itself.
-
-```bash
-make cleanup             # Clean up resources (keep cluster)
-```
+> **⚠️ Warning:** `cleanup-all` will delete Kind clusters but is safe for existing clusters (EKS, GKE, AKS, etc.)
 
 ### Examples Management
 ```bash
