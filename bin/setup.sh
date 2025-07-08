@@ -468,8 +468,8 @@ prompt_cluster_choice() {
                 ;;
             3)
                 log "Exiting. You can run specific setup commands later:"
-                echo "  ./setup.sh cluster-only     # Use existing cluster"
-                echo "  ./setup.sh install-deps     # Install dependencies only"
+                echo "  make use-existing           # Use existing cluster"
+                echo "  make verify-system          # Check system dependencies"
                 exit 0
                 ;;
             *)
@@ -653,9 +653,9 @@ install_deps() {
     success "Dependencies installed successfully!"
     echo ""
     echo "Next steps:"
-    echo "1. Run './setup.sh' to create cluster and complete setup"
+    echo "1. Run 'make setup' to create cluster and complete setup"
     echo "2. Or run individual commands:"
-    echo "   - './setup.sh cluster-only' to create cluster"
+    echo "   - 'make use-existing' to use existing cluster"
     echo "   - 'make submit-job' to start training"
 }
 
@@ -674,7 +674,7 @@ create_cluster_only() {
     success "Cluster setup completed successfully!"
     echo ""
     echo "Next steps:"
-    echo "1. Run './setup.sh install-operator' to install Kubeflow training operator"
+    echo "1. Run 'make install-operator' to install Kubeflow training operator"
     echo "2. Run 'make submit-job' to start training"
     echo "3. Run 'make status' to check job status"
     echo "4. Run 'make logs' to view training logs"
@@ -700,7 +700,7 @@ use_existing_cluster() {
     success "Existing cluster setup completed successfully!"
     echo ""
     echo "Next steps:"
-    echo "1. Run './setup.sh install-operator' to install Kubeflow training operator"
+    echo "1. Run 'make install-operator' to install Kubeflow training operator"
     echo "2. Run 'make submit-job' to start training"
     echo "3. Run 'make status' to check job status"
     echo "4. Run 'make logs' to view training logs"
@@ -725,7 +725,7 @@ install_operator_only() {
     success "Kubeflow training operator installed successfully!"
     echo ""
     echo "Next steps:"
-    echo "1. Run './setup.sh prepare-training' to prepare training environment"
+    echo "1. Setup is already complete with the operator - ready for training"
     echo "2. Run 'make submit-job' to start training"
 }
 
@@ -742,7 +742,7 @@ prepare_training_env() {
     
     # Check if training operator is installed
     if ! kubectl get crd pytorchjobs.kubeflow.org &> /dev/null; then
-        error "PyTorchJob CRD not found. Please install the training operator first: ./setup.sh install-operator"
+        error "PyTorchJob CRD not found. Please install the training operator first: make install-operator"
     fi
     
     # Install Python dependencies if not already installed
@@ -821,10 +821,10 @@ main() {
     success "Infrastructure setup completed successfully!"
     echo ""
     echo "Next steps:"
-    echo "1. Run './setup.sh setup-training' to install operator and prepare training"
-    echo "2. Or run individual commands:"
-    echo "   - './setup.sh install-operator' to install training operator"
-    echo "   - './setup.sh prepare-training' to prepare training environment"
+    echo "1. Run 'make install-operator' to install operator and complete setup"
+    echo "2. Or use existing cluster with:"
+    echo "   - 'make use-existing' to configure existing cluster"
+    echo "   - 'make install-operator' to install training operator"
     echo "3. Finally run 'make submit-job' to start training"
 }
 
@@ -1529,10 +1529,10 @@ case "${1:-}" in
         echo "  cluster-info        - Show cluster information"
         echo ""
         echo "Examples:"
-        echo "  ./setup.sh                    # Full setup with prompts"
-        echo "  ./setup.sh verify-system      # Check all dependencies and readiness"
-        echo "  ./setup.sh use-existing       # Use existing cluster"
-        echo "  ./setup.sh install-operator  # Install operator on existing cluster"
+        echo "  make setup                    # Full setup with prompts"
+echo "  make verify-system            # Check all dependencies and readiness"
+echo "  make use-existing             # Use existing cluster"
+echo "  make install-operator         # Install operator on existing cluster"
         exit 1
         ;;
 esac 

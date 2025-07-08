@@ -75,6 +75,5 @@ CIFAR*/
 *.dataset
 
 # Test images for model inference
-test_images/
 test_*.png
 sample_*.png 

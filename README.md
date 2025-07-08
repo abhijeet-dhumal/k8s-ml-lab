@@ -255,4 +255,4 @@ make cleanup
 
 # Delete entire infrastructure (Kind cluster)
 make cleanup-all
-``` 
+```
