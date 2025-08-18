@@ -230,7 +230,7 @@ EPOCHS=10 WORKERS=3 BATCH_SIZE=128 make submit-job
 
 ### Use Different Model Architecture
 ```python
-# Edit scripts/distributed_mnist_training.py
+# Edit scripts/mnist_training.py
 class CustomNet(nn.Module):
     def __init__(self):
         super(CustomNet, self).__init__()

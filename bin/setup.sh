@@ -20,7 +20,7 @@ WORKERS=${WORKERS:-2}
 BATCH_SIZE=${BATCH_SIZE:-64}
 LEARNING_RATE=${LEARNING_RATE:-0.001}
 JOB_TIMEOUT=${JOB_TIMEOUT:-600}  # 10 minutes
-JOB_NAME="pytorch-single-worker-distributed"
+JOB_NAME="mnist-training"
 
 # Cluster type detection
 USE_EXISTING_CLUSTER=false
@@ -543,7 +543,7 @@ install_kubeflow_operator() {
 create_configmap() {
     log "Creating ConfigMap for training script..."
     kubectl create configmap pytorch-training-script \
-        --from-file=distributed_mnist_training.py=scripts/distributed_mnist_training.py \
+        --from-file=mnist.py=scripts/mnist.py \
         --dry-run=client -o yaml | kubectl apply -f -
     success "ConfigMap created"
 }
@@ -975,8 +975,8 @@ submit_and_monitor_job() {
     fi
     
     # Check if training script exists
-    if [[ ! -f "scripts/distributed_mnist_training.py" ]]; then
-        error "Training script not found: scripts/distributed_mnist_training.py"
+        if [[ ! -f "scripts/mnist.py" ]]; then
+        error "Training script not found: scripts/mnist.py"
     fi
     
     # Download MNIST dataset if not already present
@@ -1078,10 +1078,23 @@ monitor_job() {
 collect_artifacts() {
     section "Collecting Training Artifacts"
 
-    # Collect training artifacts
+    # Create clean, organized directory structure
     timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
-    output_dir="output/${JOB_NAME}_${timestamp}"
-    mkdir -p "$output_dir"
+    
+    # Main organized structure
+    models_dir="output/models"
+    logs_dir="output/logs"
+    archive_dir="output/archive"
+    
+    # Latest directories
+    latest_models_dir="$models_dir/latest"
+    latest_logs_dir="$logs_dir/latest"
+    
+    # Archive directories for this run
+    run_archive_dir="$archive_dir/${JOB_NAME}_${timestamp}"
+    
+    # Create directory structure
+    mkdir -p "$latest_models_dir" "$latest_logs_dir" "$run_archive_dir"
     
     # Brief final status
     log "Final training status:"
@@ -1089,8 +1102,8 @@ collect_artifacts() {
 
     # Collect logs from pods
     log "Collecting pod logs..."
-    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master > "$output_dir/master-pod-logs.txt" 2>/dev/null || warn "Could not collect master pod logs"
-    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=worker > "$output_dir/worker-pod-logs.txt" 2>/dev/null || warn "Could not collect worker pod logs"
+    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master > "$latest_logs_dir/master-pod-logs.txt" 2>/dev/null || warn "Could not collect master pod logs"
+    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=worker > "$latest_logs_dir/worker-pod-logs.txt" 2>/dev/null || warn "Could not collect worker pod logs"
 
     # Get pod names (pods should be available with cleanPodPolicy: None)
     master_pod=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
@@ -1098,41 +1111,77 @@ collect_artifacts() {
     # Collect model artifacts from mounted volumes and pod
     log "Collecting model artifacts..."
     
-    # Try volume mount first (preferred)
+    # Try volume mount first (preferred) - UPDATED for new mnist.py structure
+    model_found=false
+    
+    # Check for new mnist.py model files (priority order)
+    if [[ -f "output/mnist_model.pt" ]]; then
+        log "Found latest model in mounted volume, moving to models/latest..."
+        mv "output/mnist_model.pt" "$latest_models_dir/mnist_model.pt"
+        success "Latest model moved: $(ls -lh "$latest_models_dir/mnist_model.pt" | awk '{print $5}')"
+        model_found=true
+    fi
+    
+    if [[ -f "output/mnist_model_best.pt" ]]; then
+        log "Found best model in mounted volume, moving to models/latest..."
+        mv "output/mnist_model_best.pt" "$latest_models_dir/mnist_model_best.pt"
+        success "Best model moved: $(ls -lh "$latest_models_dir/mnist_model_best.pt" | awk '{print $5}')"
+        model_found=true
+    fi
+    
+    if [[ -f "output/checkpoints/latest_checkpoint.pth" ]]; then
+        log "Found latest checkpoint in mounted volume, moving to models/latest..."
+        mkdir -p "$latest_models_dir/checkpoints"
+        mv "output/checkpoints/latest_checkpoint.pth" "$latest_models_dir/checkpoints/latest_checkpoint.pth"
+        success "Latest checkpoint moved: $(ls -lh "$latest_models_dir/checkpoints/latest_checkpoint.pth" | awk '{print $5}')"
+        model_found=true
+    fi
+    
+    # Fallback to old file names for compatibility
     if [[ -f "output/trained-model.pth" ]]; then
-        log "Found model in mounted volume, moving to job directory..."
-        mv "output/trained-model.pth" "$output_dir/trained-model.pth"
-        success "Model moved from volume mount: $(ls -lh "$output_dir/trained-model.pth" | awk '{print $5}')"
-    elif [[ -n "$master_pod" ]]; then
-        # Fallback to pod copy if volume mount fails
-        log "Copying model from pod: $master_pod"
-        if kubectl cp "$master_pod":/output/trained-model.pth "$output_dir/trained-model.pth" 2>/dev/null; then
-            success "Model copied from pod: $(ls -lh "$output_dir/trained-model.pth" | awk '{print $5}')"
+        log "Found legacy model in mounted volume, moving to models/latest..."
+        mv "output/trained-model.pth" "$latest_models_dir/trained-model.pth"
+        success "Legacy model moved: $(ls -lh "$latest_models_dir/trained-model.pth" | awk '{print $5}')"
+        model_found=true
+    fi
+    
+    # If no models found in volume mount, try pod copy
+    if [[ "$model_found" == false ]] && [[ -n "$master_pod" ]]; then
+        log "No models found in volume mount, copying from pod: $master_pod"
+        if kubectl cp "$master_pod":/output/mnist_model.pt "$latest_models_dir/mnist_model.pt" 2>/dev/null; then
+            success "Latest model copied from pod: $(ls -lh "$latest_models_dir/mnist_model.pt" | awk '{print $5}')"
+            model_found=true
+        elif kubectl cp "$master_pod":/output/mnist_model_best.pt "$latest_models_dir/mnist_model_best.pt" 2>/dev/null; then
+            success "Best model copied from pod: $(ls -lh "$latest_models_dir/mnist_model_best.pt" | awk '{print $5}')"
+            model_found=true
+        elif kubectl cp "$master_pod":/output/checkpoints/latest_checkpoint.pth "$latest_models_dir/checkpoints/latest_checkpoint.pth" 2>/dev/null; then
+            success "Latest checkpoint copied from pod: $(ls -lh "$latest_models_dir/checkpoints/latest_checkpoint.pth" | awk '{print $5}')"
+            model_found=true
         else
             error "Failed to collect model from both volume mount and pod. Check logs: kubectl logs $master_pod"
         fi
-    else
-        error "No model found in volume mount and no pod available for copying"
+    elif [[ "$model_found" == false ]]; then
+        error "No models found in volume mount and no pod available for copying"
     fi
     
     # Collect training metadata
     if [[ -f "output/training_metadata.txt" ]]; then
-        mv "output/training_metadata.txt" "$output_dir/training_metadata.txt"
-        log "Training metadata moved from mounted volume"
+        mv "output/training_metadata.txt" "$latest_models_dir/training_metadata.txt"
+        log "Training metadata moved to models/latest"
     elif [[ -n "$master_pod" ]]; then
-        kubectl cp "$master_pod":/output/training_metadata.txt "$output_dir/training_metadata.txt" 2>/dev/null || \
+        kubectl cp "$master_pod":/output/training_metadata.txt "$latest_models_dir/training_metadata.txt" 2>/dev/null || \
         warn "Could not collect training metadata from pod"
     else
         warn "Training metadata not found in volume mount or pod"
     fi
 
     # Create job summary
-    cat > "$output_dir/job-info.txt" << EOF
+    cat > "$latest_models_dir/job-info.txt" << EOF
 Training Job Summary
 ===================
 Job Name: $JOB_NAME
 Timestamp: $timestamp
-Output Directory: $output_dir
+Output Directory: $latest_models_dir
 Configuration:
   - Epochs: $EPOCHS
   - Workers: $WORKERS
@@ -1143,12 +1192,31 @@ Status: $(kubectl get pytorchjob "$JOB_NAME" -o jsonpath='{.status.phase}' 2>/de
 Completion Time: $(date)
 EOF
 
-    # Create symlink to latest
-    rm -f output/latest
-    ln -sf "${JOB_NAME}_${timestamp}" output/latest
+    # Archive previous latest if it exists
+    if [[ -d "$models_dir/latest" && "$(ls -A "$models_dir/latest" 2>/dev/null)" ]]; then
+        # Check if it's different from current run
+        if [[ ! -f "$models_dir/latest/job-info.txt" ]] || [[ "$(grep -c "$timestamp" "$models_dir/latest/job-info.txt" 2>/dev/null)" -eq 0 ]]; then
+            log "Archiving previous latest models..."
+            mv "$models_dir/latest" "$run_archive_dir/models"
+            success "Previous models archived to: $run_archive_dir/models"
+        fi
+    fi
 
-    success "Training artifacts saved to: $output_dir"
-    echo "Latest results symlink: output/latest -> output/${JOB_NAME}_${timestamp}"
+    # Create simple symlink to latest
+    rm -f output/latest
+    ln -sf "models/latest" output/latest
+
+    # Clean up any remaining loose files
+    if [[ -d "output/checkpoints" && "$(ls -A "output/checkpoints" 2>/dev/null)" ]]; then
+        rm -rf "output/checkpoints"
+        log "Cleaned up loose checkpoints directory"
+    fi
+
+    success "Training artifacts organized in clean structure:"
+    echo "   📁 Models: $latest_models_dir"
+    echo "   📁 Logs: $latest_logs_dir"
+    echo "   📁 Archive: $run_archive_dir"
+    echo "   🔗 Latest symlink: output/latest -> models/latest"
 }
 
 # Run model inference
@@ -1166,19 +1234,36 @@ run_inference() {
             error "Specified model not found: $MODEL_PATH"
         fi
     else
-        # Auto-detect latest model
-        if [[ -f "output/latest/trained-model.pth" ]]; then
-            model_path="output/latest/trained-model.pth"
+        # Auto-detect latest model (UPDATED for new organized structure)
+        if [[ -f "output/models/latest/mnist_model.pt" ]]; then
+            model_path="output/models/latest/mnist_model.pt"
+        elif [[ -f "output/models/latest/mnist_model_best.pt" ]]; then
+            model_path="output/models/latest/mnist_model_best.pt"
+        elif [[ -f "output/models/latest/checkpoints/latest_checkpoint.pth" ]]; then
+            model_path="output/models/latest/checkpoints/latest_checkpoint.pth"
+        # Fallback to old structure for compatibility
+        elif [[ -f "output/mnist_model.pt" ]]; then
+            model_path="output/mnist_model.pt"
+        elif [[ -f "output/mnist_model_best.pt" ]]; then
+            model_path="output/mnist_model_best.pt"
+        elif [[ -f "output/checkpoints/latest_checkpoint.pth" ]]; then
+            model_path="output/checkpoints/latest_checkpoint.pth"
         else
-            # Look for most recent model
-            latest_dir=$(ls -t output/pytorch-single-worker-distributed_* 2>/dev/null | head -1 || echo "")
-            if [[ -n "$latest_dir" && -f "output/$latest_dir/trained-model.pth" ]]; then
-                model_path="output/$latest_dir/trained-model.pth"
-            fi
+            # Fallback: Look for most recent model in old structure
+                    # Fallback: Look for most recent model in old structure
+        latest_dir=$(ls -t output/mnist-training_* 2>/dev/null | head -1 || echo "")
+        if [[ -n "$latest_dir" && -f "output/$latest_dir/trained-model.pth" ]]; then
+            model_path="output/$latest_dir/trained-model.pth"
+        fi
         fi
         
         if [[ -z "$model_path" ]]; then
             error "No trained model found! Run training first with 'make submit-job'"
+            echo "Expected model files:"
+            echo "  - output/models/latest/mnist_model.pt (latest checkpoint)"
+            echo "  - output/models/latest/mnist_model_best.pt (best model)"
+            echo "  - output/models/latest/checkpoints/latest_checkpoint.pth (latest checkpoint)"
+            echo "  - output/latest/ (symlink to models/latest)"
         fi
         
         log "Auto-detected model: $model_path"
@@ -1257,7 +1342,8 @@ show_results() {
     if [[ -L "output/latest" ]]; then
         output_dir="output/$(readlink output/latest)"
     else
-        latest_dir=$(ls -t output/pytorch-single-worker-distributed_* 2>/dev/null | head -1 || echo "")
+        # Fallback: Look for most recent model in old structure
+        latest_dir=$(ls -t output/mnist-training_* 2>/dev/null | head -1 || echo "")
         if [[ -n "$latest_dir" ]]; then
             output_dir="output/$latest_dir"
         fi
@@ -1375,7 +1461,7 @@ debug_training() {
     
     log "Checking training script..."
     echo "Training script location:"
-    ls -la scripts/distributed_mnist_training.py 2>/dev/null || warn "Training script not found"
+    ls -la scripts/mnist.py 2>/dev/null || warn "Training script not found"
     echo
     
     log "Checking PyTorchJob configuration..."

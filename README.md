@@ -25,8 +25,7 @@ k8s-ml-lab/
 │   ├── pytorch-distributed-job.yaml    # Sample workload configuration
 │   └── pytorch-test-job.yaml           # Test workload configuration
 ├── scripts/                            # Sample ML workloads
-│   ├── distributed_mnist_training.py   # Distributed training example
-│   ├── simple_single_pod_training.py   # Single-pod training example
+│   ├── mnist_training.py               # Unified training script (single + distributed)
 │   └── test_mnist_model.py             # Model inference example
 ├── input/                              # Input datasets (auto-populated)
 ├── output/                             # Training outputs (auto-created)
@@ -240,7 +239,7 @@ nodes:
 
 **Configure Your Workloads:**
 ```python
-# scripts/distributed_mnist_training.py
+# scripts/mnist_training.py
 def load_dataset(rank):
     # Replace with your dataset
     train_dataset = YourDataset('/input/your-data')

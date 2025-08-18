@@ -1,5 +1,5 @@
 # Variables
-JOB_NAME := pytorch-single-worker-distributed
+JOB_NAME := mnist-training
 CLUSTER_NAME := pytorch-training-cluster
 BLUE := \033[0;34m
 GREEN := \033[0;32m
@@ -15,8 +15,19 @@ help: ## Show this help message
 	@echo "Distributed PyTorch Training Setup"
 	@echo "=================================="
 	@echo ""
-	@echo "Available commands:"
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@echo "$(BLUE)Ideal Flow (Manual Step-by-Step):$(NC)"
+	@echo "======================================"
+	@echo "1. $(GREEN)setup$(NC)                    - Full infrastructure setup"
+	@echo "2. $(GREEN)submit-job$(NC)               - Submit training job"
+	@echo "3. $(GREEN)status$(NC)                   - Monitor job progress"
+	@echo "4. $(GREEN)logs$(NC)                     - View training logs (optional)"
+	@echo "5. $(GREEN)inference$(NC)                - Run model inference"
+	@echo "6. $(GREEN)cleanup$(NC)                  - Clean up resources"
+	@echo ""
+	@echo "Or use: $(GREEN)run-e2e-workflow$(NC)   - Run all steps automatically"
+	@echo ""
+	@echo "$(BLUE)Available commands:$(NC)"
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[32m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ==============================================================================
 # SETUP & INSTALLATION
@@ -24,17 +35,17 @@ help: ## Show this help message
 
 .PHONY: setup
 setup: ## Full infrastructure setup (cluster + dependencies + training env)
-	@echo -e "$(BLUE)Setting up distributed PyTorch training environment...$(NC)"
+	@echo "$(BLUE)Setting up distributed PyTorch training environment...$(NC)"
 	$(SETUP_SCRIPT)
 
 .PHONY: verify-system
 verify-system: ## Comprehensive system and dependency verification
-	@echo -e "$(BLUE)Running comprehensive system verification...$(NC)"
+	@echo "$(BLUE)Running comprehensive system verification...$(NC)"
 	$(SETUP_SCRIPT) verify-system
 
 .PHONY: use-existing
 use-existing: ## Use existing cluster (skip cluster creation)
-	@echo -e "$(BLUE)Configuring existing cluster...$(NC)"
+	@echo "$(BLUE)Configuring existing cluster...$(NC)"
 	$(SETUP_SCRIPT) use-existing
 
 # ==============================================================================
@@ -43,34 +54,46 @@ use-existing: ## Use existing cluster (skip cluster creation)
 
 .PHONY: submit-job
 submit-job: ## Submit PyTorch distributed training job
-	@echo -e "$(BLUE)Submitting PyTorch training job...$(NC)"
+	@echo "$(BLUE)Submitting PyTorch training job...$(NC)"
 	$(SETUP_SCRIPT) submit-job
+
+.PHONY: submit-single-job
+submit-single-job: ## Submit simple single-pod training job
+	@echo "$(BLUE)Submitting simple single-pod training job...$(NC)"
+	@kubectl apply -f configs/simple-single-pod-job.yaml
+	@echo "$(GREEN)✓ Single-pod job submitted$(NC)"
 
 .PHONY: run-e2e-workflow
 run-e2e-workflow: ## Run complete end-to-end workflow (training + inference + results)
-	@echo -e "$(BLUE)Running complete end-to-end workflow...$(NC)"
+	@echo "$(BLUE)Running complete end-to-end workflow...$(NC)"
 	$(SETUP_SCRIPT) run-workflow
 
 .PHONY: status
 status: ## Show job status, pods, and recent events
-	@echo -e "$(BLUE)Job Status:$(NC)"
+	@echo "$(BLUE)Job Status:$(NC)"
 	@echo "==========="
+	@echo "Distributed Training Job:"
 	@kubectl get pytorchjob $(JOB_NAME) -o wide || echo "Job not found"
 	@echo ""
-	@echo "Pods:"
-	@kubectl get pods -l training.kubeflow.org/job-name=$(JOB_NAME) -o wide || echo "No pods found"
+	@echo "Single Training Job:"
+	@kubectl get job simple-mnist-training -o wide || echo "Job not found"
+	@echo ""
+	@echo "All Pods:"
+	@kubectl get pods -l training.kubeflow.org/job-name=$(JOB_NAME) -o wide || echo "No distributed pods found"
+	@kubectl get pods -l job-name=simple-mnist-training -o wide || echo "No single job pods found"
 	@echo ""
 	@echo "Recent Events:"
-	@kubectl get events --field-selector involvedObject.name=$(JOB_NAME) --sort-by='.lastTimestamp' | tail -5 || echo "No events found"
+	@kubectl get events --field-selector involvedObject.name=$(JOB_NAME) --sort-by='.lastTimestamp' | tail -5 || echo "No distributed job events found"
+	@kubectl get events --field-selector involvedObject.name=simple-mnist-training --sort-by='.lastTimestamp' | tail -5 || echo "No single job events found"
 
 .PHONY: logs
 logs: ## View logs from master pod (real-time)
-	@echo -e "$(BLUE)Master Pod Logs:$(NC)"
+	@echo "$(BLUE)Master Pod Logs:$(NC)"
 	@kubectl logs -l training.kubeflow.org/job-name=$(JOB_NAME),training.kubeflow.org/replica-type=master -f --tail=100
 
 .PHONY: debug
 debug: ## Show comprehensive debugging information
-	@echo -e "$(BLUE)Comprehensive Debugging Information:$(NC)"
+	@echo "$(BLUE)Comprehensive Debugging Information:$(NC)"
 	@echo "===================================="
 	@echo "Cluster Context:"
 	@kubectl config current-context || echo "No context found"
@@ -95,14 +118,14 @@ debug: ## Show comprehensive debugging information
 
 .PHONY: restart
 restart: ## Restart training job (delete + submit)
-	@echo -e "$(YELLOW)Restarting training job...$(NC)"
+	@echo "$(YELLOW)Restarting training job...$(NC)"
 	@kubectl delete pytorchjob $(JOB_NAME) || echo "Job not found"
 	@sleep 5
 	$(SETUP_SCRIPT) submit-job
 
 .PHONY: inference
 inference: ## Run model inference on test images (TEST_IMAGE=path or TEST_IMAGES_DIR=path)
-	@echo -e "$(BLUE)Running model inference...$(NC)"
+	@echo "$(BLUE)Running model inference...$(NC)"
 	$(SETUP_SCRIPT) run-inference
 
 # ==============================================================================
@@ -111,10 +134,11 @@ inference: ## Run model inference on test images (TEST_IMAGE=path or TEST_IMAGES
 
 .PHONY: cleanup
 cleanup: ## Clean up jobs and resources (keep cluster)
-	@echo -e "$(YELLOW)Cleaning up resources...$(NC)"
+	@echo "$(YELLOW)Cleaning up resources...$(NC)"
 	@kubectl delete pytorchjob $(JOB_NAME) || echo "Job not found"
+	@kubectl delete job simple-mnist-training || echo "Single job not found"
 	@kubectl delete configmap pytorch-training-script || echo "ConfigMap not found"
-	@echo -e "$(GREEN)✓ Resources cleaned up$(NC)"
+	@echo "$(GREEN)✓ Resources cleaned up$(NC)"
 
 .PHONY: cleanup-all
 cleanup-all: cleanup ## Delete entire Kind cluster and all resources

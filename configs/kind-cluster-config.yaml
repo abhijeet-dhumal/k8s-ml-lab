@@ -1,3 +1,11 @@
+# IMPORTANT: To increase worker node memory, create cluster with:
+# KIND_CLUSTER_MEMORY=4g kind create cluster --name pytorch-training-cluster --config configs/kind-cluster-config.yaml
+#
+# Memory Allocation Strategy:
+# - Control Plane: 150Mi system overhead (100Mi + 50Mi)
+# - Worker Node: 225Mi system overhead (150Mi + 75Mi)  
+# - Available for Workloads: ~3.8GB (with KIND_CLUSTER_MEMORY=4g)
+#
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: pytorch-training-cluster
@@ -15,9 +23,17 @@ nodes:
     kind: KubeletConfiguration
     maxPods: 20
     systemReserved:
-      memory: "200Mi"  # Reduced from 500Mi for more workload memory
-      cpu: "100m"      # Reduced from 300m
+      memory: "100Mi"  # Increased: kubelet needs more memory
+      cpu: "50m"       # Increased: kubelet needs more CPU
+    kubeReserved:
+      memory: "50Mi"   # Increased: kube-proxy needs more memory
+      cpu: "25m"       # Increased: kube-proxy needs more CPU
+    evictionHard:
+      memory.available: "25Mi"    # Increased: less aggressive eviction
+      nodefs.available: "5%"
+      imagefs.available: "5%"
 - role: worker
+  # Worker node with increased memory allocation
   extraMounts:
   - hostPath: ./input
     containerPath: /input
@@ -30,13 +46,13 @@ nodes:
     kind: KubeletConfiguration
     maxPods: 50
     systemReserved:
-      memory: "200Mi"  # Reduced from 500Mi for more workload memory
-      cpu: "100m"      # Reduced from 300m
+      memory: "150Mi"  # Increased: worker node needs more system memory
+      cpu: "100m"      # Increased: worker node needs more system CPU
     kubeReserved:
-      memory: "100Mi"  # Reduced from 200Mi
-      cpu: "50m"       # Reduced from 100m
-    # Increase available memory for workloads
+      memory: "75Mi"   # Increased: worker node needs more kube memory
+      cpu: "50m"       # Increased: worker node needs more kube CPU
+    # Balanced eviction for worker node
     evictionHard:
-      memory.available: "50Mi"    # More aggressive eviction
+      memory.available: "50Mi"    # Increased: balanced eviction threshold
       nodefs.available: "5%"
       imagefs.available: "5%" 

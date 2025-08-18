@@ -424,7 +424,7 @@ make create-example NAME=my-custom-example
 
 ### Use Your Own Dataset
 ```python
-# In scripts/distributed_mnist_training.py
+# In scripts/mnist_training.py
 def load_dataset(rank):
     # Replace MNIST with your dataset
     train_dataset = YourDataset('/input/your-data')
@@ -448,7 +448,7 @@ resources:
 
 ### Custom Model Architecture
 ```python
-# In scripts/distributed_mnist_training.py
+# In scripts/mnist_training.py
 class CustomNet(nn.Module):
     def __init__(self):
         super(CustomNet, self).__init__()

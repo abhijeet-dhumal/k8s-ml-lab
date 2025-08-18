@@ -5,6 +5,9 @@ metadata:
 spec:
   runPolicy:
     cleanPodPolicy: None  # Keep pods after completion for artifact collection
+    # Add timeout protection
+    activeDeadlineSeconds: 3600  # 1 hour timeout
+    backoffLimit: 3              # Retry failed pods up to 3 times
   pytorchReplicaSpecs:
     Master:
       replicas: 1
@@ -28,14 +31,29 @@ spec:
             imagePullPolicy: IfNotPresent
             command:
             - python3
-            - /scripts/distributed_mnist_training.py
+            - /scripts/mnist.py
+            - --epochs
+            - "2"
+            - --save_every
+            - "1"
+            - --batch_size
+            - "64"
+            - --lr
+            - "0.001"
+            - --dataset_path
+            - "/input"
+            - --snapshot_path
+            - "/output/mnist_model.pt"
+            - --backend
+            - "gloo"
+            - --lightweight-checkpoints
             resources:
               requests:
-                memory: 350Mi  # Conservative request for scheduling
-                cpu: 250m
+                memory: 600Mi  # Reduced to fit worker node
+                cpu: 400m
               limits:
-                memory: 450Mi  # Safe limit: 340MB actual MNIST needs + 110MB buffer
-                cpu: 500m
+                memory: 800Mi  # Reduced to fit worker node
+                cpu: 800m
             volumeMounts:
             - name: scripts
               mountPath: /scripts
@@ -78,14 +96,29 @@ spec:
             imagePullPolicy: IfNotPresent
             command:
             - python3
-            - /scripts/distributed_mnist_training.py
+            - /scripts/mnist.py
+            - --epochs
+            - "2"
+            - --save_every
+            - "1"
+            - --batch_size
+            - "64"
+            - --lr
+            - "0.001"
+            - --dataset_path
+            - "/input"
+            - --snapshot_path
+            - "/output/mnist_model.pt"
+            - --backend
+            - "gloo"
+            - --lightweight-checkpoints
             resources:
               requests:
-                memory: 350Mi  # Conservative request for scheduling
-                cpu: 250m
+                memory: 600Mi  # Reduced to fit worker node
+                cpu: 400m
               limits:
-                memory: 450Mi  # Safe limit: 340MB actual MNIST needs + 110MB buffer
-                cpu: 500m
+                memory: 800Mi  # Reduced to fit worker node
+                cpu: 800m
             volumeMounts:
             - name: scripts
               mountPath: /scripts

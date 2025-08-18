@@ -24,39 +24,50 @@ import sys
 import glob
 from pathlib import Path
 
-# Import the same CNN model architecture used for training
-class CNNModel(nn.Module):
-    """Same CNN model architecture as used in training"""
+# Import the Net class directly from the training script
+try:
+    from scripts.mnist import Net
+    print("✅ Successfully imported Net class from mnist.py")
+except ImportError as e:
+    print(f"⚠️  Warning: Could not import Net class from mnist.py: {e}")
+    print("   Falling back to local CNNModel class...")
     
-    def __init__(self):
-        super(CNNModel, self).__init__()
-        # Balanced model for good accuracy with reasonable resources
-        self.conv1 = nn.Conv2d(1, 16, 5, 1)  # 16 channels
-        self.conv2 = nn.Conv2d(16, 32, 5, 1)  # 32 channels
-        self.dropout1 = nn.Dropout2d(0.25)
-        self.dropout2 = nn.Dropout2d(0.5)
-        self.fc1 = nn.Linear(512, 64)  # 64 neurons
-        self.fc2 = nn.Linear(64, 10)
+    # Fallback CNN model architecture (same as Net class)
+    class CNNModel(nn.Module):
+        """Fallback CNN model architecture - same as Net class in mnist.py"""
+        
+        def __init__(self):
+            super(CNNModel, self).__init__()
+            # Balanced model for good accuracy with reasonable resources
+            self.conv1 = nn.Conv2d(1, 16, 5, 1)  # 16 channels
+            self.conv2 = nn.Conv2d(16, 32, 5, 1)  # 32 channels
+            self.dropout1 = nn.Dropout2d(0.25)
+            self.dropout2 = nn.Dropout2d(0.5)
+            self.fc1 = nn.Linear(512, 64)  # 64 neurons
+            self.fc2 = nn.Linear(64, 10)
 
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = torch.max_pool2d(x, 2)
-        x = torch.relu(self.conv2(x))
-        x = torch.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = torch.relu(x)
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        return torch.log_softmax(x, dim=1)
+        def forward(self, x):
+            x = torch.relu(self.conv1(x))
+            x = torch.max_pool2d(x, 2)
+            x = torch.relu(self.conv2(x))
+            x = torch.max_pool2d(x, 2)
+            x = self.dropout1(x)
+            x = torch.flatten(x, 1)
+            x = self.fc1(x)
+            x = torch.relu(x)
+            x = self.dropout2(x)
+            x = self.fc2(x)
+            return torch.log_softmax(x, dim=1)
+    
+    # Use fallback class
+    Net = CNNModel
 
 class MNISTPredictor:
     """MNIST digit predictor using trained CNN model"""
     
     def __init__(self, model_path=None):
         self.device = torch.device('cpu')  # Use CPU for inference
-        self.model = CNNModel()
+        self.model = Net()  # Use imported Net class
         
         # Find model file if not specified
         if model_path is None:
@@ -74,20 +85,35 @@ class MNISTPredictor:
         ])
     
     def find_model_file(self):
-        """Find the most recent trained model file"""
+        """Find the most recent trained model file - updated for new mnist.py structure"""
         possible_paths = [
-            'output/latest/trained-model.pth',
-            'output/trained-model.pth',
-            '../output/latest/trained-model.pth',
-            '../output/trained-model.pth'
+                    # New organized structure (priority order)
+        'output/models/latest/mnist_model.pt',           # Latest checkpoint
+        'output/models/latest/mnist_model_best.pt',      # Best model
+        'output/models/latest/checkpoints/latest_checkpoint.pth',  # Latest checkpoint
+        # Legacy structure (fallback)
+        'output/mnist_model.pt',           # Latest checkpoint
+        'output/mnist_model_best.pt',      # Best model
+        'output/checkpoints/latest_checkpoint.pth',  # Latest checkpoint
+        # Old structure (fallback)
+        'output/latest/trained-model.pth',
+        'output/trained-model.pth',
+        '../output/models/latest/mnist_model.pt',
+        '../output/models/latest/mnist_model_best.pt',
+        '../output/models/latest/checkpoints/latest_checkpoint.pth',
+        '../output/mnist_model.pt',
+        '../output/mnist_model_best.pt',
+        '../output/checkpoints/latest_checkpoint.pth',
+        '../output/latest/trained-model.pth',
+        '../output/trained-model.pth'
         ]
         
-        # Also search for any .pth files in output directories
+        # Also search for any .pth/.pt files in output directories
         search_patterns = [
-            'output/**/trained-model.pth',
-            '../output/**/trained-model.pth',
-            'output/**/*.pth',
-            '../output/**/*.pth'
+            'output/**/*.pt',      # New .pt files
+            'output/**/*.pth',     # Old .pth files
+            '../output/**/*.pt',   # New .pt files
+            '../output/**/*.pth'   # Old .pth files
         ]
         
         # Try exact paths first
@@ -110,16 +136,30 @@ class MNISTPredictor:
         )
     
     def load_model(self, model_path):
-        """Load the trained model"""
+        """Load the trained model - handles both checkpoint files and direct model files"""
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
         try:
             # Load model state
-            state_dict = torch.load(model_path, map_location=self.device)
+            loaded_data = torch.load(model_path, map_location=self.device)
+            
+            # Check if it's a checkpoint file or direct model file
+            if isinstance(loaded_data, dict) and "MODEL_STATE" in loaded_data:
+                # It's a checkpoint file - extract model state
+                print(f"📦 Loading from checkpoint file: {model_path}")
+                state_dict = loaded_data["MODEL_STATE"]
+                print(f"   Checkpoint info: Epochs run: {loaded_data.get('EPOCHS_RUN', 'Unknown')}")
+            else:
+                # It's a direct model file
+                print(f"🔧 Loading direct model file: {model_path}")
+                state_dict = loaded_data
+            
+            # Load the state dict into the model
             self.model.load_state_dict(state_dict)
             self.model.eval()  # Set to evaluation mode
             print(f"✅ Model loaded successfully from: {model_path}")
+            
         except Exception as e:
             raise RuntimeError(f"Failed to load model: {e}")
     

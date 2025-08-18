@@ -48,6 +48,7 @@ venv.bak/
 
 # Kubernetes temporary files
 temp-training-op/
+k8s-ml-training-template
 
 # Logs
 *.log
