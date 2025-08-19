@@ -5,6 +5,12 @@ MNIST Model Inference Script
 Test the trained MNIST CNN model by providing handwritten digit images
 and getting predicted digit outputs.
 
+IMPORTANT: The model architecture must match the trained model:
+- conv1: 20 channels (1 input, 20 output, 5x5 kernel)
+- conv2: 50 channels (20 input, 50 output, 5x5 kernel) 
+- fc1: 500 neurons (800 input from flattened conv2, 500 output)
+- fc2: 10 neurons (500 input, 10 output for digits 0-9)
+
 Usage:
     python test_mnist_model.py --image path/to/image.png
     python test_mnist_model.py --image path/to/image.png --model path/to/model.pth
@@ -26,25 +32,42 @@ from pathlib import Path
 
 # Import the Net class directly from the training script
 try:
-    from scripts.mnist import Net
-    print("✅ Successfully imported Net class from mnist.py")
+    # Try multiple import paths for different execution contexts
+    try:
+        from scripts.mnist import Net
+        print("✅ Successfully imported Net class from scripts.mnist")
+    except ImportError:
+        try:
+            from mnist import Net
+            print("✅ Successfully imported Net class from mnist")
+        except ImportError:
+            # Add the scripts directory to Python path
+            import sys
+            import os
+            scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'scripts')
+            if os.path.exists(scripts_dir):
+                sys.path.insert(0, scripts_dir)
+                from mnist import Net
+                print("✅ Successfully imported Net class from mnist (via path adjustment)")
+            else:
+                raise ImportError("Could not find scripts directory")
 except ImportError as e:
     print(f"⚠️  Warning: Could not import Net class from mnist.py: {e}")
     print("   Falling back to local CNNModel class...")
     
-    # Fallback CNN model architecture (same as Net class)
+    # Fallback CNN model architecture - MUST MATCH the actual trained model!
     class CNNModel(nn.Module):
-        """Fallback CNN model architecture - same as Net class in mnist.py"""
+        """Fallback CNN model architecture - MUST match Net class in mnist.py"""
         
         def __init__(self):
             super(CNNModel, self).__init__()
-            # Balanced model for good accuracy with reasonable resources
-            self.conv1 = nn.Conv2d(1, 16, 5, 1)  # 16 channels
-            self.conv2 = nn.Conv2d(16, 32, 5, 1)  # 32 channels
+            # IMPORTANT: This must match the actual trained model architecture
+            self.conv1 = nn.Conv2d(1, 20, 5, 1)  # 20 channels (not 16!)
+            self.conv2 = nn.Conv2d(20, 50, 5, 1)  # 50 channels (not 32!)
             self.dropout1 = nn.Dropout2d(0.25)
             self.dropout2 = nn.Dropout2d(0.5)
-            self.fc1 = nn.Linear(512, 64)  # 64 neurons
-            self.fc2 = nn.Linear(64, 10)
+            self.fc1 = nn.Linear(800, 500)  # 500 neurons (not 64!)
+            self.fc2 = nn.Linear(500, 10)
 
         def forward(self, x):
             x = torch.relu(self.conv1(x))

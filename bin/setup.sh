@@ -330,13 +330,23 @@ install_kind() {
     success "kind installed successfully"
 }
 
-# Install Python dependencies
+# Install Python dependencies for local inference testing only
 install_python_deps() {
-    log "Installing Python dependencies..."
+    log "Installing Python dependencies for local inference testing..."
     
     # Check if pip is available
     if ! command -v pip3 &> /dev/null && ! command -v pip &> /dev/null; then
         error "pip not found. Please install Python 3 and pip first."
+    fi
+    
+    # Check if we're in a virtual environment
+    if [[ "$VIRTUAL_ENV" == "" ]]; then
+        log "Creating virtual environment for Python packages..."
+        python3 -m venv venv
+        source venv/bin/activate
+        log "Virtual environment activated"
+    else
+        log "Using existing virtual environment: $VIRTUAL_ENV"
     fi
     
     # Use pip3 if available, otherwise pip
@@ -345,11 +355,12 @@ install_python_deps() {
         pip_cmd="pip"
     fi
     
-    # Install PyTorch and related packages
-    $pip_cmd install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-    $pip_cmd install kubernetes pyyaml
+    # Install only the packages needed for local inference testing
+    log "Installing packages for local inference: torch, torchvision, pillow, numpy"
+    $pip_cmd install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    $pip_cmd install pillow numpy
     
-    success "Python dependencies installed"
+    success "Python dependencies for local inference installed"
 }
 
 # Detect existing Kubernetes cluster
@@ -648,7 +659,6 @@ install_deps() {
     install_python
     install_kubectl
     install_kind
-    install_python_deps
     
     success "Dependencies installed successfully!"
     echo ""
@@ -745,9 +755,6 @@ prepare_training_env() {
         error "PyTorchJob CRD not found. Please install the training operator first: make install-operator"
     fi
     
-    # Install Python dependencies if not already installed
-    install_python_deps
-    
     create_directories
     create_configmap
     download_mnist
@@ -775,9 +782,6 @@ setup_training() {
     
     # Detect cluster type for information
     detect_existing_cluster &> /dev/null || true
-    
-    # Install Python dependencies if not already installed
-    install_python_deps
     
     install_kubeflow_operator
     create_directories
@@ -814,7 +818,6 @@ main() {
         install_kind
     fi
     
-    install_python_deps
     create_directories
     create_cluster
     
@@ -892,11 +895,11 @@ verify_system() {
         all_deps_ok=false
     fi
     
-    # Check Python dependencies
-    if python3 -c "import torch, torchvision, requests, yaml" &> /dev/null; then
-        success "Python dependencies: PyTorch, torchvision, requests, PyYAML installed"
+    # Check Python dependencies for local inference
+    if python3 -c "import torch, torchvision, PIL, numpy" &> /dev/null; then
+        success "Python dependencies: torch, torchvision, pillow, numpy installed (ready for local inference)"
     else
-        warn "Python dependencies: some required packages missing"
+        warn "Python dependencies: some packages missing (local inference may fail)"
         all_deps_ok=false
     fi
     
@@ -1222,6 +1225,26 @@ EOF
 # Run model inference
 run_inference() {
     section "Model Inference Testing"
+
+    # Install Python dependencies for local inference testing (on-demand)
+    log "Checking Python dependencies for local inference..."
+    
+    # Activate virtual environment if it exists
+    if [[ -f "venv/bin/activate" ]]; then
+        log "Activating virtual environment..."
+        source venv/bin/activate
+    fi
+    
+    if ! python3 -c "import torch, torchvision, PIL, numpy" &> /dev/null; then
+        log "Python packages not found - installing them now..."
+        install_python_deps
+        # Reactivate virtual environment after installation
+        if [[ -f "venv/bin/activate" ]]; then
+            source venv/bin/activate
+        fi
+    else
+        success "Python dependencies already installed"
+    fi
 
     # Determine model path
     model_path=""
@@ -1589,7 +1612,7 @@ case "${1:-}" in
         echo ""
         echo "Infrastructure Commands:"
         echo "  (none)              - Full infrastructure setup (cluster + dependencies)"
-        echo "  install-deps        - Install only dependencies (Docker/Podman, Python, kubectl, kind)"
+        echo "  install-deps        - Install only dependencies (Docker/Podman, kubectl, kind)"
         echo "  cluster-only        - Create cluster (prompt for existing vs new)"
         echo "  use-existing        - Use existing cluster (skip cluster creation)"
         echo "  check-requirements  - Check system requirements only"
@@ -1605,7 +1628,7 @@ case "${1:-}" in
         echo "  submit-job          - Submit and monitor distributed training job"
         echo "  monitor-job         - Monitor existing training job progress"
         echo "  collect-artifacts   - Collect training artifacts (model, logs, metadata)"
-        echo "  run-inference       - Run model inference on test images"
+        echo "  run-inference       - Run model inference on test images (installs Python packages if needed)"
         echo "  show-results        - Display comprehensive training results summary"
         echo "  debug-training      - Show detailed debug information for training issues"
         echo "  run-workflow        - Run complete end-to-end workflow (all phases)"
