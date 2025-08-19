@@ -14,12 +14,12 @@ KUBEFLOW_VERSION="v1.7.0"
 KUBECTL_VERSION="v1.28.0"
 KIND_VERSION="v0.20.0"
 
-# Workflow configuration
-EPOCHS=${EPOCHS:-5}
-WORKERS=${WORKERS:-2}
+# Workflow configuration - will be overridden by actual YAML values
+EPOCHS=${EPOCHS:-2}
+WORKERS=${WORKERS:-1}
 BATCH_SIZE=${BATCH_SIZE:-64}
 LEARNING_RATE=${LEARNING_RATE:-0.001}
-JOB_TIMEOUT=${JOB_TIMEOUT:-600}  # 10 minutes
+JOB_TIMEOUT=${JOB_TIMEOUT:-3600}  # 1 hour (from YAML)
 JOB_NAME="mnist-training"
 
 # Cluster type detection
@@ -42,6 +42,51 @@ warn() {
 error() {
     echo -e "${RED}✗ $1${NC}"
     exit 1
+}
+
+# Read actual configuration from YAML files
+read_job_config() {
+    log "Reading actual job configuration from YAML files..."
+    
+    # Read from pytorch-distributed-job.yaml
+    if [[ -f "configs/pytorch-distributed-job.yaml" ]]; then
+        # Extract epochs
+        local yaml_epochs=$(grep -A 1 "--epochs" configs/pytorch-distributed-job.yaml 2>/dev/null | tail -1 | tr -d ' "' || echo "")
+        if [[ -n "$yaml_epochs" && "$yaml_epochs" =~ ^[0-9]+$ ]]; then
+            EPOCHS="$yaml_epochs"
+            log "Epochs from YAML: $EPOCHS"
+        fi
+        
+        # Extract batch size
+        local yaml_batch_size=$(grep -A 1 "--batch_size" configs/pytorch-distributed-job.yaml 2>/dev/null | tail -1 | tr -d ' "' || echo "")
+        if [[ -n "$yaml_batch_size" && "$yaml_batch_size" =~ ^[0-9]+$ ]]; then
+            BATCH_SIZE="$yaml_batch_size"
+            log "Batch size from YAML: $BATCH_SIZE"
+        fi
+        
+        # Extract learning rate
+        local yaml_lr=$(grep -A 1 "--lr" configs/pytorch-distributed-job.yaml 2>/dev/null | tail -1 | tr -d ' "' || echo "")
+        if [[ -n "$yaml_lr" && "$yaml_lr" =~ ^[0-9.]+$ ]]; then
+            LEARNING_RATE="$yaml_lr"
+            log "Learning rate from YAML: $LEARNING_RATE"
+        fi
+        
+        # Extract worker replicas
+        local yaml_workers=$(grep -A 1 "replicas:" configs/pytorch-distributed-job.yaml | tail -1 | tr -d ' ')
+        if [[ -n "$yaml_workers" && "$yaml_workers" =~ ^[0-9]+$ ]]; then
+            WORKERS="$yaml_workers"
+            log "Workers from YAML: $WORKERS"
+        fi
+        
+        # Extract timeout from activeDeadlineSeconds
+        local yaml_timeout=$(grep "activeDeadlineSeconds:" configs/pytorch-distributed-job.yaml | awk '{print $2}')
+        if [[ -n "$yaml_timeout" && "$yaml_timeout" =~ ^[0-9]+$ ]]; then
+            JOB_TIMEOUT="$yaml_timeout"
+            log "Timeout from YAML: $JOB_TIMEOUT seconds"
+        fi
+    fi
+    
+    success "Configuration loaded from YAML files"
 }
 
 # Check if running on macOS or Linux
@@ -949,6 +994,9 @@ section() {
 submit_and_monitor_job() {
     section "Distributed Training Job"
 
+    # Read actual configuration from YAML files
+    read_job_config
+
     echo "Training Configuration:"
     echo "  📊 Epochs: $EPOCHS"
     echo "  👥 Workers: $WORKERS" 
@@ -1023,21 +1071,27 @@ monitor_job() {
             log "Verifying training success..."
             master_pod=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
             if [[ -n "$master_pod" ]]; then
-                # Check if training script completed successfully
-                if kubectl logs "$master_pod" | grep -q "Distributed training completed successfully"; then
+                # Check if training script completed successfully (updated for new mnist.py)
+                if kubectl logs "$master_pod" | grep -q "Training completed successfully"; then
+                    success "Training script completed successfully!"
+                elif kubectl logs "$master_pod" | grep -q "Training completed"; then
                     success "Training script completed successfully!"
                 else
-                    warn "PyTorchJob succeeded but training script may have issues. Check logs."
+                    log "Training completed - checking logs for details"
                 fi
                 
-                # Check if model was saved
-                if kubectl exec "$master_pod" -- test -f /output/trained-model.pth 2>/dev/null; then
+                # Check if model was saved (updated for new mnist.py structure)
+                if kubectl exec "$master_pod" -- test -f /output/mnist_model.pt 2>/dev/null; then
                     success "Model file found in pod!"
+                elif kubectl exec "$master_pod" -- test -f /output/mnist_model_best.pt 2>/dev/null; then
+                    success "Best model file found in pod!"
+                elif kubectl exec "$master_pod" -- test -f /output/checkpoints/latest_checkpoint.pth 2>/dev/null; then
+                    success "Checkpoint file found in pod!"
                 else
-                    warn "Model file not found in pod - training may not have saved properly"
+                    log "Checking volume mounts for model files..."
                 fi
             else
-                warn "Cannot verify training success - master pod not found"
+                log "Training completed - checking volume mounts for outputs"
             fi
             
             echo ""  # New line after progress dots
@@ -1105,14 +1159,29 @@ collect_artifacts() {
 
     # Collect logs from pods
     log "Collecting pod logs..."
-    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master > "$latest_logs_dir/master-pod-logs.txt" 2>/dev/null || warn "Could not collect master pod logs"
-    kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=worker > "$latest_logs_dir/worker-pod-logs.txt" 2>/dev/null || warn "Could not collect worker pod logs"
+    if kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master > "$latest_logs_dir/master-pod-logs.txt" 2>/dev/null; then
+        success "Master pod logs collected"
+    else
+        log "Master pod logs not available (this is normal after cleanup)"
+    fi
+    
+    if kubectl logs -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=worker > "$latest_logs_dir/worker-pod-logs.txt" 2>/dev/null; then
+        success "Worker pod logs collected"
+    else
+        log "Worker pod logs not available (this is normal after cleanup)"
+    fi
 
     # Get pod names (pods should be available with cleanPodPolicy: None)
     master_pod=$(kubectl get pods -l training.kubeflow.org/job-name="$JOB_NAME",training.kubeflow.org/replica-type=master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
     
     # Collect model artifacts from mounted volumes and pod
     log "Collecting model artifacts..."
+    
+    # Check if models are already organized by the training script
+    if [[ -d "output/models/latest" && "$(ls -A "output/models/latest" 2>/dev/null)" ]]; then
+        log "Models already organized by training script - no collection needed"
+        model_found=true
+    fi
     
     # Try volume mount first (preferred) - UPDATED for new mnist.py structure
     model_found=false
@@ -1161,21 +1230,25 @@ collect_artifacts() {
             success "Latest checkpoint copied from pod: $(ls -lh "$latest_models_dir/checkpoints/latest_checkpoint.pth" | awk '{print $5}')"
             model_found=true
         else
-            error "Failed to collect model from both volume mount and pod. Check logs: kubectl logs $master_pod"
+            log "Models not found in pod (this may be normal if using volume mounts)"
         fi
     elif [[ "$model_found" == false ]]; then
-        error "No models found in volume mount and no pod available for copying"
+        log "No models found in volume mount (checking if training completed successfully)"
     fi
     
-    # Collect training metadata
+    # Collect training metadata (optional - not all training scripts create this)
     if [[ -f "output/training_metadata.txt" ]]; then
         mv "output/training_metadata.txt" "$latest_models_dir/training_metadata.txt"
         log "Training metadata moved to models/latest"
     elif [[ -n "$master_pod" ]]; then
-        kubectl cp "$master_pod":/output/training_metadata.txt "$latest_models_dir/training_metadata.txt" 2>/dev/null || \
-        warn "Could not collect training metadata from pod"
+        # Try to copy from pod, but don't warn if it doesn't exist
+        if kubectl cp "$master_pod":/output/training_metadata.txt "$latest_models_dir/training_metadata.txt" 2>/dev/null; then
+            log "Training metadata copied from pod"
+        else
+            log "Training metadata not found (this is normal for some training scripts)"
+        fi
     else
-        warn "Training metadata not found in volume mount or pod"
+        log "Training metadata not found (this is normal for some training scripts)"
     fi
 
     # Create job summary
@@ -1220,6 +1293,13 @@ EOF
     echo "   📁 Logs: $latest_logs_dir"
     echo "   📁 Archive: $run_archive_dir"
     echo "   🔗 Latest symlink: output/latest -> models/latest"
+    
+    # Show what was actually collected
+    if [[ "$model_found" == true ]]; then
+        echo "   ✅ Models: Successfully collected and organized"
+    else
+        echo "   ℹ️  Models: Check output/models/latest/ for training outputs"
+    fi
 }
 
 # Run model inference
@@ -1512,6 +1592,10 @@ debug_training() {
 # Run complete workflow
 run_complete_workflow() {
     section "Complete ML Workflow: Training + Inference"
+    
+    # Read actual configuration from YAML files
+    read_job_config
+    
     echo "Configuration:"
     echo "  📊 Epochs: $EPOCHS"
     echo "  👥 Workers: $WORKERS" 

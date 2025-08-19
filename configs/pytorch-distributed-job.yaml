@@ -1,11 +1,10 @@
 apiVersion: kubeflow.org/v1
 kind: PyTorchJob
 metadata:
-  name: pytorch-single-worker-distributed
+  name: mnist-training
 spec:
   runPolicy:
     cleanPodPolicy: None  # Keep pods after completion for artifact collection
-    # Add timeout protection
     activeDeadlineSeconds: 3600  # 1 hour timeout
     backoffLimit: 3              # Retry failed pods up to 3 times
   pytorchReplicaSpecs:

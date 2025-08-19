@@ -13,6 +13,7 @@ A production-ready, infrastructure-first solution that gets you from zero to a f
 ✅ **Resource Optimization**: Memory and CPU configurations tuned for local development  
 ✅ **Fault-Tolerant Setup**: Robust infrastructure with multiple fallback mechanisms  
 ✅ **Ready-to-Use Examples**: Pre-configured distributed PyTorch training as proof-of-concept  
+✅ **Podman Support**: Native support for Podman container runtime (no Docker required)  
 
 ## 📁 Project Structure
 
@@ -22,10 +23,12 @@ k8s-ml-lab/
 │   └── setup.sh                       # Infrastructure automation script
 ├── configs/                            # Infrastructure configurations
 │   ├── kind-cluster-config.yaml        # Kind cluster specification
-│   ├── pytorch-distributed-job.yaml    # Sample workload configuration
-│   └── pytorch-test-job.yaml           # Test workload configuration
+│   ├── pytorch-distributed-job.yaml    # Distributed training job configuration
+│   ├── pytorch-test-job.yaml           # Test job configuration
+│   └── simple-single-pod-job.yaml      # Single-pod training job
 ├── scripts/                            # Sample ML workloads
-│   ├── mnist_training.py               # Unified training script (single + distributed)
+│   ├── mnist.py                        # Unified training script (single + distributed)
+│   ├── simple_test.py                  # Simple distributed test script
 │   └── test_mnist_model.py             # Model inference example
 ├── input/                              # Input datasets (auto-populated)
 ├── output/                             # Training outputs (auto-created)
@@ -37,7 +40,9 @@ k8s-ml-lab/
 │   ├── 04-gpu-training/                # GPU-enabled cluster setup
 │   ├── 05-debugging/                   # Infrastructure debugging guide
 │   └── 06-common-issues/               # Infrastructure troubleshooting
+├── Dockerfile.pytorch-cpu              # PyTorch CPU-optimized container image
 ├── Makefile                           # Infrastructure automation commands
+├── requirements.txt                    # Python dependencies (for local inference only)
 └── README.md                          # This file
 ```
 
@@ -47,7 +52,7 @@ k8s-ml-lab/
 - **macOS 11+** or **Linux** (Ubuntu, Fedora, Debian, etc.)
 - **8GB+ RAM** (16GB recommended)
 - **4+ CPU cores**, **10GB free disk space**
-- **Docker or Podman** (container runtime)
+- **Podman** (recommended) or **Docker** (container runtime)
 
 ### 1. Infrastructure Setup
 ```bash
@@ -83,9 +88,6 @@ make run-e2e-workflow    # Runs training + inference + testing automatically
 ### 3. Test ML Workload
 ```bash
 # Test the sample distributed training workload
-python scripts/test_mnist_model.py
-
-# OR: Use make command for easier testing
 make inference                                    # Test with built-in images
 TEST_IMAGE=path/to/digit.png make inference       # Test single custom image
 TEST_IMAGES_DIR=my_digits/ make inference         # Test directory of images
@@ -94,7 +96,7 @@ TEST_IMAGES_DIR=my_digits/ make inference         # Test directory of images
 ## 📊 Expected Infrastructure Results
 
 ```
-SUCCESS: Kind cluster 'ml-training-cluster' created
+SUCCESS: Kind cluster 'pytorch-training-cluster' created
 SUCCESS: Kubeflow Training Operator installed
 SUCCESS: gloo backend initialized - Rank 0, World size 2
 Rank 0: Using pre-downloaded MNIST dataset (60000 train, 10000 test)
@@ -124,14 +126,14 @@ The `make run-e2e-workflow` command runs the complete end-to-end workflow automa
 - Extracts trained model from completed pods
 - Runs inference tests on sample handwritten digit images
 - Generates training metrics and accuracy reports
-- Saves all outputs to `output/latest/` directory
+- Saves all outputs to `output/` directory
 
 **Example output:**
 ```
 ✅ Training job submitted and completed
-✅ Model extracted: output/latest/trained-model.pth
-✅ Inference tests passed: 8/10 correct predictions
-✅ Training metrics saved: output/latest/training_metadata.txt
+✅ Model extracted: output/mnist_model.pt
+✅ Inference tests passed: 3/3 correct predictions
+✅ Training metrics saved: output/training_metadata.txt
 ```
 
 ## 🔍 System Verification
@@ -145,11 +147,10 @@ The `make verify-system` command performs comprehensive verification of your sys
 - Operating system and architecture detection
 
 **Dependencies Verification:**
-- Container runtime: Docker/Podman installation and status
+- Container runtime: Podman/Docker installation and status
 - Python: version and availability
 - kubectl: Kubernetes CLI installation and version
 - kind: Kubernetes in Docker installation
-- Python packages: PyTorch, torchvision, requests, PyYAML
 
 **Infrastructure Status:**
 - Kubernetes cluster accessibility
@@ -161,11 +162,11 @@ The `make verify-system` command performs comprehensive verification of your sys
 ✅ Memory: 16GB (sufficient)
 ✅ CPU cores: 8 (sufficient)
 ✅ Disk space: 45GB free (sufficient)
-✅ Docker: installed and running
+✅ Podman: installed and running
 ✅ Python: 3.11.5
 ✅ kubectl: v1.28.0
 ✅ kind: v0.20.0
-✅ Python dependencies: PyTorch, torchvision, requests, PyYAML installed
+✅ Python dependencies: Provided by container image (no local installation needed)
 ✅ Kubernetes cluster: accessible
 ✅ Kubeflow Training Operator: installed
 ✅ System verification completed - all dependencies are ready!
@@ -195,14 +196,14 @@ The `make verify-system` command performs comprehensive verification of your sys
 
 ```bash
 # Infrastructure Management
-make setup               # Complete infrastructure setup (cluster + dependencies + training env)
+make setup               # Complete infrastructure setup (cluster + training environment)
 make verify-system       # Comprehensive system and dependency verification
 make use-existing        # Use existing cluster (skip cluster creation)
 
 # Training & Workflows
 make submit-job          # Submit PyTorch distributed training job
 make run-e2e-workflow    # Run complete end-to-end workflow (training + inference + results)
-make inference           # Run model inference on test images (TEST_IMAGE=path or TEST_IMAGES_DIR=path)
+make inference           # Run model inference on test images (installs Python packages if needed)
 make status              # Show job status, pods, and recent events
 make logs                # View logs from master pod (real-time)
 make restart             # Restart training job (delete + submit)
@@ -220,6 +221,18 @@ make install-operator    # Install Kubeflow training operator (standalone)
 ```
 
 ## 🎨 Quick Infrastructure Customization
+
+**Current Training Configuration:**
+```yaml
+# configs/pytorch-distributed-job.yaml
+Training Parameters:
+  epochs: 2                    # Training epochs
+  batch_size: 64              # Batch size
+  learning_rate: 0.001        # Learning rate
+  workers: 1                  # Number of worker replicas
+  timeout: 3600               # Job timeout (1 hour)
+  backend: "gloo"             # Distributed backend (CPU-friendly)
+```
 
 **Scale Infrastructure:**
 ```yaml
@@ -239,13 +252,41 @@ nodes:
 
 **Configure Your Workloads:**
 ```python
-# scripts/mnist_training.py
+# scripts/mnist.py
 def load_dataset(rank):
     # Replace with your dataset
     train_dataset = YourDataset('/input/your-data')
     return train_dataset, test_dataset
 ```
 
+## 🐳 Container Runtime Support
+
+### **Podman (Recommended)**
+```bash
+# macOS
+brew install podman
+podman machine init
+podman machine start
+
+# Fedora Linux
+sudo dnf install -y podman
+sudo systemctl enable podman.socket
+sudo systemctl start podman.socket
+
+# Set environment variable for Kind
+export KIND_EXPERIMENTAL_PROVIDER=podman
+```
+
+### **Docker (Alternative)**
+```bash
+# macOS
+brew install --cask docker
+
+# Linux
+sudo dnf install -y docker  # Fedora
+sudo systemctl enable docker
+sudo systemctl start docker
+```
 ## 🧹 Cleanup
 
 ```bash
@@ -255,3 +296,8 @@ make cleanup
 # Delete entire infrastructure (Kind cluster)
 make cleanup-all
 ```
+### **Getting Help:**
+- Check system requirements: `make verify-system`
+- View cluster status: `make status`
+- Debug training issues: `make debug`
+- Check examples: `examples/README.md`
